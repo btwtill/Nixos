@@ -39,7 +39,7 @@
 
       laptop = mkSystem {
         system = "x86_64-linux";
-        hostname = "laptop"
+        hostname = "laptop";
       };
 
       vm = mkSystem {
