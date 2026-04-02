@@ -4,7 +4,7 @@
   disko.devices = {
     disk.main = {
       type = "disk";
-      device = "/dev/vda";  # 👈 common for VMs (check with lsblk!)
+      device = "/dev/vda";  # VM disk
 
       content = {
         type = "gpt";
