@@ -51,6 +51,5 @@
     diskoConfigurations = {
       vm = ./hosts/vm/disko.nix;
     };
-  }
-
+  };
 }
