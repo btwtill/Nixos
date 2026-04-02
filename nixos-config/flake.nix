@@ -45,7 +45,7 @@
       vm = mkSystem {
         system = "aarch64-linux";
         hostname = "vm";
-      }
+      };
     };
 
     diskoConfigurations = {
