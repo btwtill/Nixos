@@ -49,7 +49,7 @@
     };
 
     diskoConfigurations = {
-      vm = import ./hosts/vm/disko.nix;
+      vm = import ./hosts/VM/disko.nix;
     };
   };
 }
