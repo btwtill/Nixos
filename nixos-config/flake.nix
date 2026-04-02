@@ -8,26 +8,48 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs"                  # Makes sure the home-manager system uses the same package managing version then the nixpkgs
     };
+
+    disko = {                                             # Add the components that are needed to partition a target system disk
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = { self, nixpkgs, home-manager, ... }:         # Funktion that takes the system inputs and creates declared systems 
   let 
-      system = "x86_64-linux";                            # States that the target host will be a x86 architecture
+    # function to create different
+    mkSystem = { system, hostname, extraModules ? [ ] }:
+      nixpkgs.lib.nixosSystem {
+        inherit system;
+
+        modules = [
+          ./hosts/${hostname}/configuration.nix
+
+          # Home Manager (shared)
+          home-manager.nixosModules.home-manager
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.users.yourusername =
+              import ./home/user.nix;
+          }
+        ] ++ extraModules;
+      };
   in {
-    nixosConfigurations.laptop = nixpkgs.lib.nixosSystem {  # Give the system a name -> important for the nix building command to specify what system you want to build
-      inherit system;
+    nixosConfigurations = {
 
-      modules = [                                         # This is the part where the home manager builds together the whole user configuration based on your files and config structure setups
-        ./hosts/laptop/configuration.nix
+      laptop = mkSystem {
+        system = "x86_64-linux";
+        hostname = "laptop"
+      };
 
-        home-manager.nixosModules.home-manager
-        {
-          home-manager.useGlobalPkgs = true;              # Allow packages to be reused and no duplicates
-          home-manager.useUserPkgs = true;                # Allows the home manager to install packages
-
-          home-manager.users.defaultUser = import ./home/user.nix     # Sets up the dotconfig fiels
-        }
-      ]
+      vm = mkSystem {
+        sysetm = "aarch64-linux";
+        hostname = "vm";
+        extraModules = [
+          disko.nixosModules.disko
+          ./hosts/vm/disko.nix
+        ];
+      }
     }
   }
 

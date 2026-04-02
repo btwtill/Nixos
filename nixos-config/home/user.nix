@@ -10,8 +10,8 @@
   programs.zsh.enable = true;             # enable z shell usage
 
   xdg.configFile."qtile/config.py".source = ../dotfiles/qtile/config.py;    # create symlink to qtile config
-  xdg.configFile."nvim".source = ../dotfiles/nvim;                          # create symlink to neavim config
-  xdg.configFile."zsh/.zshrc".source = ../dotfiles/zsh/.zshrc;              # create symlink to zshell config
+  # xdg.configFile."nvim".source = ../dotfiles/nvim;                          # create symlink to neavim config
+  # xdg.configFile."zsh/.zshrc".source = ../dotfiles/zsh/.zshrc;              # create symlink to zshell config
 
-  home.stateVersion = "0326";             # Set current home version
+  home.stateVersion = "0426";             # Set current home version
 }
