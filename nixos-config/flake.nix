@@ -1,38 +1,41 @@
 {
-  description = "Nixos Config";           # Pure metadata - only general setup name
+  description = "Nixos Config";
 
-  inputs = {                                              # The components nixos will have to pull and make available for any system you want to build
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";  # Package directoy containing the nixos package univers (all packages you would want and more) and especially the sysetm packages
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    home-manager = {                                      # A system that handles user configs declaratively
+    home-manager = {
       url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";                 # Makes sure the home-manager system uses the same package managing version then the nixpkgs
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    disko = {                                             # Add the components that are needed to partition a target system disk
+    disko = {
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, home-manager, ... }:         # Funktion that takes the system inputs and creates declared systems 
-  let 
-    # function to create different
-    mkSystem = { system, hostname, extraModules ? [ ] }:
+  # ↓ disko explicitly destructured
+  outputs = { self, nixpkgs, home-manager, disko, ... }:
+  let
+    mkSystem = { system, hostname, diskoConfig ? null, extraModules ? [] }:
       nixpkgs.lib.nixosSystem {
         inherit system;
 
         modules = [
           ./hosts/${hostname}/configuration.nix
 
-          # Home Manager (shared)
+          disko.nixosModules.disko
+
           home-manager.nixosModules.home-manager
           {
             home-manager.useGlobalPkgs = true;
-            home-manager.users.yourusername =
-              import ./home/user.nix;
+            home-manager.users.yourusername = import ./home/user.nix;
           }
-        ] ++ extraModules;
+        ]
+        # ↓ Only add the disko config module if one was provided for this host
+        ++ (if diskoConfig != null then [ diskoConfig ] else [])
+        ++ extraModules;
       };
   in {
     nixosConfigurations = {
@@ -45,11 +48,13 @@
       vm = mkSystem {
         system = "aarch64-linux";
         hostname = "vm";
+        diskoConfig = ./hosts/vm/disko.nix;  # ← wired into nixosSystem for mounts
       };
     };
 
+    # ↓ This is what your nix run command actually reads
     diskoConfigurations = {
-      vm = import ./hosts/VM/disko.nix;
+      vm = import ./hosts/vm/disko.nix;
     };
   };
 }
