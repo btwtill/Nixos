@@ -43,12 +43,8 @@
       };
 
       vm = mkSystem {
-        sysetm = "aarch64-linux";
+        system = "aarch64-linux";
         hostname = "vm";
-        extraModules = [
-          disko.nixosModules.disko
-          ./hosts/vm/disko.nix
-        ];
       }
     };
 
