@@ -41,5 +41,5 @@
   # SSH (optional but useful)
   services.openssh.enable = true;
 
-  system.stateVersion = "0426";
+  system.stateVersion = "25.05";
 }
