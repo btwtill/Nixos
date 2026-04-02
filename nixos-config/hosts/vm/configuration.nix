@@ -1,8 +1,8 @@
-{ config, pkgs, ... }:
+{ modulesPath, config, pkgs, ... }:
 
 {
   imports = [
-    <nixpkgs/nixos/modules/profiles/qemu-guest.nix>
+    (modulesPath + "/profiles/qemu-guest.nix")
   ];
 
   # Bootloader
