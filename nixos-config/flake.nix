@@ -6,7 +6,7 @@
 
     home-manager = {                                      # A system that handles user configs declaratively
       url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs"                  # Makes sure the home-manager system uses the same package managing version then the nixpkgs
+      inputs.nixpkgs.follows = "nixpkgs";                 # Makes sure the home-manager system uses the same package managing version then the nixpkgs
     };
 
     disko = {                                             # Add the components that are needed to partition a target system disk
