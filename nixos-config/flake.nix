@@ -50,11 +50,11 @@
           ./hosts/vm/disko.nix
         ];
       }
+    };
 
-      diskoConfigurations {
-        vm = ./hosts/vm/disko.nix;
-      };
-    }
+    diskoConfigurations = {
+      vm = ./hosts/vm/disko.nix;
+    };
   }
 
 }
