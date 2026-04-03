@@ -30,7 +30,7 @@
           home-manager.nixosModules.home-manager
           {
             home-manager.useGlobalPkgs = true;
-            home-manager.users.yourusername = import ./home/user.nix;
+            home-manager.users.defaultUser = import ./home/user.nix;
           }
         ]
         # ↓ Only add the disko config module if one was provided for this host
