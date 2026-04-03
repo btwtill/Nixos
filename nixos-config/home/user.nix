@@ -13,5 +13,5 @@
   # xdg.configFile."nvim".source = ../dotfiles/nvim;                          # create symlink to neavim config
   # xdg.configFile."zsh/.zshrc".source = ../dotfiles/zsh/.zshrc;              # create symlink to zshell config
 
-  home.stateVersion = "0426";             # Set current home version
+  home.stateVersion = "25.05";             # Set current home version
 }
