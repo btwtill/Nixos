@@ -29,7 +29,7 @@
   ];
 
   # User
-  users.users.yourusername = {
+  users.users.defaultUser = {
     isNormalUser = true;
     extraGroups = [ "wheel" ];
     initialPassword = "password";
