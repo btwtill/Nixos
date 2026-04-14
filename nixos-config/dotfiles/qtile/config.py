@@ -1,10 +1,19 @@
 from libqtile import bar, layout, widget, hook, qtile  # type: ignore
 from libqtile.config import Group, Screen, Click, Drag  # type: ignore
 from libqtile.lazy import lazy  # type: ignore
+from libqtile.config import Key #type: ignore
 import subprocess
 import os
 
 mod = "mod4"
+
+# ----------------------
+# Key Bindings
+# ----------------------
+keys = [
+    Key([mod], "x", lazy.window.kill()),
+    Key([mod], "Tab", lazy.next_layout()),
+]
 
 # ----------------------
 # Groups = Screens
@@ -46,11 +55,12 @@ def set_group_layout():
 # ----------------------
 # Touch-friendly mouse
 # ----------------------
-mouse = [
-    Drag([], "Button1", lazy.window.set_position_floating()),
-    Drag([], "Button3", lazy.window.set_size_floating()),
-    Click([], "Button1", lazy.window.bring_to_front()),
-]
+# mouse = [
+#     Drag([], "Button1", lazy.window.set_position_floating()),
+#     Drag([], "Button3", lazy.window.set_size_floating()),
+#     Click([], "Button1", lazy.window.bring_to_front()),
+#     Click([], "Button1", lazy.window.focus()),
+# ]
 
 # ----------------------
 # Widget Defaults (BIG UI)
