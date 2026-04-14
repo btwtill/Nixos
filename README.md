@@ -6,6 +6,10 @@
 
 ### VM 
 
+#### UTM Config
+
+
+
 #### Partitioning
 
 * Create your VM with the correct ISO Image attached
@@ -31,7 +35,7 @@ git clone https://github.com/btwtill/Nixos
 * Now partition your disk with the disko command
 
 ```
-sudo nix --experimental-feature "nix-command flakes" github:nix-community/disko -- --mode destroy,format,mount ./Nixos/nixos-config/hosts/vm/disko.nix
+sudo nix --experimental-features "nix-command flakes" run github:nix-community/disko -- --mode destroy,format,mount ./Nixos/nixos-config/hosts/vm/disko.nix
 ```
 
 #### NixOs install
@@ -45,5 +49,5 @@ mkdir -p /mnt/tmp
 * Install the flake config
 
 ```
-TMPDIR=/mnt/tmp nixos-install --flakes 
+TMPDIR=/mnt/tmp nixos-install --flake /tmp/Nixos/nixos-config#vm
 ```

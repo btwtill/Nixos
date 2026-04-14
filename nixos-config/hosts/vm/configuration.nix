@@ -35,6 +35,8 @@
 
   services.xserver.windowManager.qtile.enable = true;
 
+  services.getty.autologinUser = "defaultUser";
+
   # Basic packages for Qtile usability
   environment.systemPackages = with pkgs; [
     python313Packages.qtile

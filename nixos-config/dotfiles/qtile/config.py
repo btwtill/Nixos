@@ -75,7 +75,7 @@ def spawn(cmd):
 # ----------------------
 screens = [
     Screen(
-        left=bar.Bar(
+        right=bar.Bar(
             [
                 # --- NAVIGATION ---
                 widget.TextBox("🏠", fontsize=32,
@@ -92,15 +92,15 @@ screens = [
 
                 widget.Spacer(length=20),
 
-                # --- APPS ---
-                widget.TextBox("🌐", fontsize=30,
-                    mouse_callbacks={"Button1": spawn("firefox")}),
+                # # --- APPS ---
+                # widget.TextBox("🌐", fontsize=30,
+                #     mouse_callbacks={"Button1": spawn("firefox")}),
 
-                widget.TextBox("📁", fontsize=30,
-                    mouse_callbacks={"Button1": spawn("thunar")}),
+                # widget.TextBox("📁", fontsize=30,
+                #     mouse_callbacks={"Button1": spawn("thunar")}),
 
-                widget.TextBox("🖥", fontsize=30,
-                    mouse_callbacks={"Button1": spawn("alacritty")}),
+                # widget.TextBox("🖥", fontsize=30,
+                #     mouse_callbacks={"Button1": spawn("alacritty")}),
 
                 widget.Spacer(),
 
@@ -115,6 +115,17 @@ screens = [
 
                 # --- CLOCK ---
                 widget.Clock(format="%H:%M"),
+
+                widget.Spacer(),
+
+                widget.TextBox("🌙", fontsize=28,
+                    mouse_callbacks={"Button1": lazy.spawn("xset dpms force off")}),
+
+                widget.TextBox("🔄", fontsize=28,
+                    mouse_callbacks={"Button1": lazy.spawn("systemctl reboot")}),
+
+                widget.TextBox("⏻", fontsize=28,
+                    mouse_callbacks={"Button1": lazy.spawn("systemctl poweroff")})
             ],
             100,
             background="#1e1e1e",
@@ -127,6 +138,8 @@ screens = [
 # ----------------------
 @hook.subscribe.startup_once
 def autostart():
+    subprocess.Popen(["nitrogen", "--restore"])
+
     subprocess.Popen([
         "picom",
         "--config",

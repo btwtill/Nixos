@@ -11,6 +11,9 @@
 
   xdg.configFile."qtile".source = ../dotfiles/qtile;    # create symlink to qtile config
   xdg.configFile."picom".source = ../dotfiles/picom;    # create symlink to picom config
+
+  home.file."wallpapers/background.jpg".source =
+    ../dotfiles/wallpapers/background.png;
   # xdg.configFile."nvim".source = ../dotfiles/nvim;                          # create symlink to neavim config
   # xdg.configFile."zsh/.zshrc".source = ../dotfiles/zsh/.zshrc;              # create symlink to zshell config
 
