@@ -9,7 +9,8 @@
   programs.git.enable = true;             # enable git usage
   programs.zsh.enable = true;             # enable z shell usage
 
-  xdg.configFile."qtile/config.py".source = ../dotfiles/qtile/config.py;    # create symlink to qtile config
+  xdg.configFile."qtile".source = ../dotfiles/qtile;    # create symlink to qtile config
+  xdg.configFile."picom".source = ../dotfiles/picom;    # create symlink to picom config
   # xdg.configFile."nvim".source = ../dotfiles/nvim;                          # create symlink to neavim config
   # xdg.configFile."zsh/.zshrc".source = ../dotfiles/zsh/.zshrc;              # create symlink to zshell config
 
