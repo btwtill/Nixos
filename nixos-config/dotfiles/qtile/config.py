@@ -85,7 +85,7 @@ screens = [
         top=bar.Bar(
             [
                 # --- NAVIGATION ---
-                widget.TextBox("1", fontsize=32,
+                widget.TextBox("One", fontsize=32,
                     mouse_callbacks={"Button1": go("1")}),
 
                 widget.TextBox("2", fontsize=32,
