@@ -2,65 +2,62 @@ from libqtile import bar, layout, widget, hook, qtile  # type: ignore
 from libqtile.config import Group, Screen, Click, Drag  # type: ignore
 from libqtile.lazy import lazy  # type: ignore
 from libqtile.config import Key #type: ignore
+from libqtile.utils import guess_terminal #type: ignore
 import subprocess
 import os
 
 mod = "mod4"
+terminal = guess_terminal()
+mouse = [
+    Click([], "Button1", lazy.window.focus()),
+]
+
+# ----------------------
+# Color Tokens
+# ----------------------
+
+colors = {
+    "bg": "#1e1e1e",
+    "fg": "#ffffff",
+    "accent": "#3daee9",
+}
 
 # ----------------------
 # Key Bindings
 # ----------------------
 keys = [
     Key([mod], "x", lazy.window.kill()),
-    Key([mod], "Tab", lazy.next_layout()),
+    Key([mod], "Return", lazy.spawn(terminal)),
+    Key([mod], "f", lazy.window.toggle_fullscreen())
 ]
 
 # ----------------------
 # Groups = Screens
 # ----------------------
 groups = [
-    Group("1", label="HOME"),
-    Group("2", label="MEDIA"),
-    Group("3", label="NAV"),
-    Group("4", label="SYS"),
+    Group("1", layout="monadtall"),
+    Group("2", layout="monadtall"),
+    Group("3", layout="monadtall"),
+    Group("4", layout="monadtall"),
 ]
 
 # ----------------------
 # Layouts
 # ----------------------
+
+layout_theme = {
+    "border_width": 3,
+    "margin": 15,
+    "border_focus": colors["accent"],
+    "border_normal": colors["fg"],
+    "single_border_width": 3
+}
+
 layouts = [
-    layout.MonadTall(
-        ratio=0.6,
-        border_width=0,
-        margin=0
-    ),
+    layout.MonadTall(**layout_theme),
     layout.Max(),
-    layout.Floating(border_width=0)
+    layout.Floating(),
 ]
-
-# ----------------------
-# Assign fixed layouts per group
-# ----------------------
-@hook.subscribe.setgroup
-def set_group_layout():
-    name = qtile.current_group.name
-
-    if name == "1":
-        qtile.current_group.layout = "monadtall"
-    elif name in ["2", "3"]:
-        qtile.current_group.layout = "max"
-    elif name == "4":
-        qtile.current_group.layout = "floating"
-
-# ----------------------
-# Touch-friendly mouse
-# ----------------------
-# mouse = [
-#     Drag([], "Button1", lazy.window.set_position_floating()),
-#     Drag([], "Button3", lazy.window.set_size_floating()),
-#     Click([], "Button1", lazy.window.bring_to_front()),
-#     Click([], "Button1", lazy.window.focus()),
-# ]
 
 # ----------------------
 # Widget Defaults (BIG UI)
@@ -85,40 +82,33 @@ def spawn(cmd):
 # ----------------------
 screens = [
     Screen(
-        right=bar.Bar(
+        top=bar.Bar(
             [
                 # --- NAVIGATION ---
-                widget.TextBox("🏠", fontsize=32,
+                widget.TextBox("1", fontsize=32,
                     mouse_callbacks={"Button1": go("1")}),
 
-                widget.TextBox("🎵", fontsize=32,
+                widget.TextBox("2", fontsize=32,
                     mouse_callbacks={"Button1": go("2")}),
 
-                widget.TextBox("🧭", fontsize=32,
+                widget.TextBox("3", fontsize=32,
                     mouse_callbacks={"Button1": go("3")}),
 
-                widget.TextBox("⚙️", fontsize=32,
+                widget.TextBox("4", fontsize=32,
                     mouse_callbacks={"Button1": go("4")}),
 
                 widget.Spacer(length=20),
 
-                # # --- APPS ---
-                # widget.TextBox("🌐", fontsize=30,
-                #     mouse_callbacks={"Button1": spawn("firefox")}),
-
-                # widget.TextBox("📁", fontsize=30,
-                #     mouse_callbacks={"Button1": spawn("thunar")}),
-
-                # widget.TextBox("🖥", fontsize=30,
-                #     mouse_callbacks={"Button1": spawn("alacritty")}),
+                widget.TextBox("Terminal", fontsize=30,
+                    mouse_callbacks={"Button1": spawn(terminal)}),
 
                 widget.Spacer(),
 
                 # --- WINDOW CONTROL ---
-                widget.TextBox("⛶", fontsize=28,
+                widget.TextBox("Full", fontsize=28,
                     mouse_callbacks={"Button1": lazy.window.toggle_fullscreen()}),
 
-                widget.TextBox("✕", fontsize=28,
+                widget.TextBox("Close", fontsize=28,
                     mouse_callbacks={"Button1": lazy.window.kill()}),
 
                 widget.Spacer(length=20),
@@ -128,56 +118,41 @@ screens = [
 
                 widget.Spacer(),
 
-                widget.TextBox("🌙", fontsize=28,
+                widget.TextBox("sleep", fontsize=28,
                     mouse_callbacks={"Button1": lazy.spawn("xset dpms force off")}),
 
-                widget.TextBox("🔄", fontsize=28,
+                widget.TextBox("reboot", fontsize=28,
                     mouse_callbacks={"Button1": lazy.spawn("systemctl reboot")}),
 
-                widget.TextBox("⏻", fontsize=28,
+                widget.TextBox("shutdown", fontsize=28,
                     mouse_callbacks={"Button1": lazy.spawn("systemctl poweroff")})
             ],
             100,
-            background="#1e1e1e",
+            background= colors["bg"],
         ),
     ),
 ]
+
+# ----------------------
+# General Settings
+# ----------------------
+
+follow_mouse_focus = True
+bring_front_click = True
+cursor_warp = False
+auto_fullscreen = True
+focus_on_window_activation = "smart"
+reconfigure_screens = True
 
 # ----------------------
 # Autostart
 # ----------------------
 @hook.subscribe.startup_once
 def autostart():
-    subprocess.Popen(["nitrogen", "--restore"])
 
-    subprocess.Popen([
-        "picom",
-        "--config",
-        os.path.expanduser("~/.config/picom/picom.conf")
-    ])
+    home = os.path.expanduser("~/.config/qtile/autostart.sh")
 
-# ----------------------
-# Manage new windows (merged logic)
-# ----------------------
-@hook.subscribe.client_new
-def manage_client(client):
-    wm_class = client.get_wm_class()
-
-    # if wm_class:
-    #     lowered = [w.lower() for w in wm_class]
-
-    #     if "firefox" in lowered:
-    #         client.togroup("1")
-    #     elif "vlc" in lowered:
-    #         client.togroup("2")
-
-    # fullscreen behavior for MEDIA + NAV
-    # if client.group and client.group.name in ["2", "3"]:
-    #     client.toggle_fullscreen()
-
-# ----------------------
-# Misc
-# ----------------------
-follow_mouse_focus = True
-bring_front_click = True
-cursor_warp = False
+    if os.path.exists(home):
+        subprocess.Popen([home])
+    else:
+        print("Autostart script not found!")
