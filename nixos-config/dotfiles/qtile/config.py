@@ -1,13 +1,13 @@
-from libqtile import bar, layout, widget, hook, qtile  # type: ignore
-from libqtile.config import Group, Screen, Click, Drag  # type: ignore
-from libqtile.lazy import lazy  # type: ignore
-from libqtile.config import Key #type: ignore
-from libqtile.utils import guess_terminal #type: ignore
+from libqtile import bar, layout, widget, hook      #type: ignore
+from libqtile.config import Group, Screen, Click, Drag, Key  #type: ignore
+from libqtile.lazy import lazy  #type: ignore
+from libqtile.utils import guess_terminal  #type: ignore
 import subprocess
 import os
 
 mod = "mod4"
 terminal = guess_terminal()
+
 mouse = [
     Click([], "Button1", lazy.window.focus()),
 ]
@@ -15,7 +15,6 @@ mouse = [
 # ----------------------
 # Color Tokens
 # ----------------------
-
 colors = {
     "bg": "#1e1e1e",
     "fg": "#ffffff",
@@ -28,11 +27,11 @@ colors = {
 keys = [
     Key([mod], "x", lazy.window.kill()),
     Key([mod], "Return", lazy.spawn(terminal)),
-    Key([mod], "f", lazy.window.toggle_fullscreen())
+    Key([mod], "f", lazy.window.toggle_fullscreen()),
 ]
 
 # ----------------------
-# Groups = Screens
+# Groups
 # ----------------------
 groups = [
     Group("1", layout="monadtall"),
@@ -44,13 +43,12 @@ groups = [
 # ----------------------
 # Layouts
 # ----------------------
-
 layout_theme = {
     "border_width": 3,
     "margin": 15,
     "border_focus": colors["accent"],
     "border_normal": colors["fg"],
-    "single_border_width": 3
+    "single_border_width": 3,
 }
 
 layouts = [
@@ -60,7 +58,7 @@ layouts = [
 ]
 
 # ----------------------
-# Widget Defaults (BIG UI)
+# Widget Defaults
 # ----------------------
 widget_defaults = dict(
     font="sans",
@@ -69,23 +67,35 @@ widget_defaults = dict(
 )
 
 # ----------------------
-# Helper functions
+# Helper functions — return plain callables, not lazy
 # ----------------------
-def go(group):
-    return lazy.group[group].toscreen()
+def go(group_name):
+    def _inner(qtile):
+        qtile.groups_map[group_name].toscreen()
+    return _inner
 
-def spawn(cmd):
-    return lazy.spawn(cmd)
+def spawn_cmd(cmd):
+    def _inner(qtile):
+        qtile.spawn(cmd)
+    return _inner
+
+def kill_window(qtile):
+    if qtile.current_window:
+        qtile.current_window.kill()
+
+def toggle_fullscreen(qtile):
+    if qtile.current_window:
+        qtile.current_window.toggle_fullscreen()
 
 # ----------------------
-# Sidebar (Main UI)
+# Screens
 # ----------------------
 screens = [
     Screen(
         top=bar.Bar(
             [
                 # --- NAVIGATION ---
-                widget.TextBox("One", fontsize=32,
+                widget.TextBox("1", fontsize=32,
                     mouse_callbacks={"Button1": go("1")}),
 
                 widget.TextBox("2", fontsize=32,
@@ -100,16 +110,16 @@ screens = [
                 widget.Spacer(length=20),
 
                 widget.TextBox("Terminal", fontsize=30,
-                    mouse_callbacks={"Button1": spawn(terminal)}),
+                    mouse_callbacks={"Button1": spawn_cmd(terminal)}),
 
                 widget.Spacer(),
 
                 # --- WINDOW CONTROL ---
                 widget.TextBox("Full", fontsize=28,
-                    mouse_callbacks={"Button1": lazy.window.toggle_fullscreen()}),
+                    mouse_callbacks={"Button1": toggle_fullscreen}),
 
                 widget.TextBox("Close", fontsize=28,
-                    mouse_callbacks={"Button1": lazy.window.kill()}),
+                    mouse_callbacks={"Button1": kill_window}),
 
                 widget.Spacer(length=20),
 
@@ -119,16 +129,16 @@ screens = [
                 widget.Spacer(),
 
                 widget.TextBox("sleep", fontsize=28,
-                    mouse_callbacks={"Button1": lazy.spawn("xset dpms force off")}),
+                    mouse_callbacks={"Button1": spawn_cmd("xset dpms force off")}),
 
                 widget.TextBox("reboot", fontsize=28,
-                    mouse_callbacks={"Button1": lazy.spawn("systemctl reboot")}),
+                    mouse_callbacks={"Button1": spawn_cmd("systemctl reboot")}),
 
                 widget.TextBox("shutdown", fontsize=28,
-                    mouse_callbacks={"Button1": lazy.spawn("systemctl poweroff")})
+                    mouse_callbacks={"Button1": spawn_cmd("systemctl poweroff")}),
             ],
             100,
-            background= colors["bg"],
+            background=colors["bg"],
         ),
     ),
 ]
@@ -136,7 +146,6 @@ screens = [
 # ----------------------
 # General Settings
 # ----------------------
-
 follow_mouse_focus = True
 bring_front_click = True
 cursor_warp = False
@@ -149,9 +158,7 @@ reconfigure_screens = True
 # ----------------------
 @hook.subscribe.startup_once
 def autostart():
-
     home = os.path.expanduser("~/.config/qtile/autostart.sh")
-
     if os.path.exists(home):
         subprocess.Popen([home])
     else:
