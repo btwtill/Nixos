@@ -22,15 +22,6 @@ colors = {
 }
 
 # ----------------------
-# Key Bindings
-# ----------------------
-keys = [
-    Key([mod], "x", lazy.window.kill()),
-    Key([mod], "Return", lazy.spawn(terminal)),
-    Key([mod], "f", lazy.window.toggle_fullscreen()),
-]
-
-# ----------------------
 # Groups
 # ----------------------
 groups = [
@@ -39,6 +30,26 @@ groups = [
     Group("3", layout="monadtall"),
     Group("4", layout="monadtall"),
 ]
+
+# ----------------------
+# Key Bindings
+# ----------------------
+keys = [
+    Key([mod], "x", lazy.window.kill()),
+    Key([mod], "Return", lazy.spawn(terminal)),
+    Key([mod], "f", lazy.window.toggle_fullscreen()),
+    # Focus movement
+    Key([mod], "h", lazy.layout.left()),
+    Key([mod], "l", lazy.layout.right()),
+    Key([mod], "j", lazy.layout.down()),
+    Key([mod], "k", lazy.layout.up()),
+]
+
+for i in groups:
+    keys.extend([
+        Key([mod], i.name, lazy.group[i.name].toscreen()),
+        Key([mod, "shift"], i.name, lazy.window.togroup(i.name, switch_group=True)),
+    ])
 
 # ----------------------
 # Layouts
@@ -67,27 +78,6 @@ widget_defaults = dict(
 )
 
 # ----------------------
-# Helper functions — return plain callables, not lazy
-# ----------------------
-def go(group_name):
-    def _inner(qtile):
-        qtile.groups_map[group_name].toscreen()
-    return _inner
-
-def spawn_cmd(cmd):
-    def _inner(qtile):
-        qtile.spawn(cmd)
-    return _inner
-
-def kill_window(qtile):
-    if qtile.current_window:
-        qtile.current_window.kill()
-
-def toggle_fullscreen(qtile):
-    if qtile.current_window:
-        qtile.current_window.toggle_fullscreen()
-
-# ----------------------
 # Screens
 # ----------------------
 screens = [
@@ -96,30 +86,30 @@ screens = [
             [
                 # --- NAVIGATION ---
                 widget.TextBox("1", fontsize=32,
-                    mouse_callbacks={"Button1": go("1")}),
+                    mouse_callbacks={"Button1": lazy.group["1"].toscreen()}),
 
                 widget.TextBox("2", fontsize=32,
-                    mouse_callbacks={"Button1": go("2")}),
+                    mouse_callbacks={"Button1": lazy.group["2"].toscreen()}),
 
                 widget.TextBox("3", fontsize=32,
-                    mouse_callbacks={"Button1": go("3")}),
+                    mouse_callbacks={"Button1": lazy.group["3"].toscreen()}),
 
                 widget.TextBox("4", fontsize=32,
-                    mouse_callbacks={"Button1": go("4")}),
+                    mouse_callbacks={"Button1": lazy.group["4"].toscreen()}),
 
                 widget.Spacer(length=20),
 
                 widget.TextBox("Terminal", fontsize=30,
-                    mouse_callbacks={"Button1": spawn_cmd(terminal)}),
+                    mouse_callbacks={"Button1": lazy.spawn(terminal)}),
 
                 widget.Spacer(),
 
                 # --- WINDOW CONTROL ---
                 widget.TextBox("Full", fontsize=28,
-                    mouse_callbacks={"Button1": toggle_fullscreen}),
+                    mouse_callbacks={"Button1": lazy.window.toggle_fullscreen()}),
 
                 widget.TextBox("Close", fontsize=28,
-                    mouse_callbacks={"Button1": kill_window}),
+                    mouse_callbacks={"Button1": lazy.window.kill()}),
 
                 widget.Spacer(length=20),
 
@@ -129,13 +119,13 @@ screens = [
                 widget.Spacer(),
 
                 widget.TextBox("sleep", fontsize=28,
-                    mouse_callbacks={"Button1": spawn_cmd("xset dpms force off")}),
+                    mouse_callbacks={"Button1": lazy.spawn("xset dpms force off")}),
 
                 widget.TextBox("reboot", fontsize=28,
-                    mouse_callbacks={"Button1": spawn_cmd("systemctl reboot")}),
+                    mouse_callbacks={"Button1": lazy.spawn("systemctl reboot")}),
 
                 widget.TextBox("shutdown", fontsize=28,
-                    mouse_callbacks={"Button1": spawn_cmd("systemctl poweroff")}),
+                    mouse_callbacks={"Button1": lazy.spawn("systemctl poweroff")}),
             ],
             100,
             background=colors["bg"],
