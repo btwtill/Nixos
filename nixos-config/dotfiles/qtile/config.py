@@ -1,5 +1,5 @@
 from libqtile import bar, layout, widget, hook      #type: ignore
-from libqtile.config import Group, Screen, Click, Drag, Key  #type: ignore
+from libqtile.config import Group, Screen, Key  #type: ignore
 from libqtile.lazy import lazy  #type: ignore
 from libqtile.utils import guess_terminal  #type: ignore
 import subprocess
@@ -8,9 +8,7 @@ import os
 mod = "mod4"
 terminal = guess_terminal()
 
-mouse = [
-    Click([], "Button1", lazy.window.focus()),
-]
+mouse = []
 
 # ----------------------
 # Color Tokens
@@ -150,6 +148,6 @@ reconfigure_screens = True
 def autostart():
     home = os.path.expanduser("~/.config/qtile/autostart.sh")
     if os.path.exists(home):
-        subprocess.Popen([home])
+        subprocess.Popen(["bash", home])
     else:
         print("Autostart script not found!")
