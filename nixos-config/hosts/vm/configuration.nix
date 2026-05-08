@@ -31,7 +31,7 @@
 
   # Enable X11 + Qtile
   services.xserver.enable = true;
-  services.xserver.layout = "de";
+  services.xserver.xkb.layout = "de";
 
   services.xserver.windowManager.qtile.enable = true;
 
@@ -45,7 +45,7 @@
     picom
     rofi
     nitrogen
-    xfce.mousepad
+    mousepad
     git
     neovim
   ];
