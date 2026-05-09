@@ -36,7 +36,6 @@ keys = [
     Key([mod], "x", lazy.window.kill()),
     Key([mod], "Return", lazy.spawn(terminal)),
     Key([mod], "f", lazy.window.toggle_fullscreen()),
-    # Focus movement
     Key([mod], "h", lazy.layout.left()),
     Key([mod], "l", lazy.layout.right()),
     Key([mod], "j", lazy.layout.down()),
@@ -50,20 +49,17 @@ for i in groups:
     ])
 
 # ----------------------
-# Layouts
+# Layouts — borderless for clean touch UI
 # ----------------------
 layout_theme = {
-    "border_width": 3,
+    "border_width": 0,
     "margin": 15,
-    "border_focus": colors["accent"],
-    "border_normal": colors["fg"],
-    "single_border_width": 3,
 }
 
 layouts = [
     layout.MonadTall(**layout_theme),
     layout.Max(),
-    layout.Floating(),
+    layout.Floating(border_width=0),
 ]
 
 # ----------------------
@@ -72,17 +68,17 @@ layouts = [
 widget_defaults = dict(
     font="sans",
     fontsize=26,
-    padding=10,
+    padding=12,
 )
 
 # ----------------------
-# Screens
+# Screens — right sidebar
 # ----------------------
 screens = [
     Screen(
-        top=bar.Bar(
+        right=bar.Bar(
             [
-                # --- NAVIGATION ---
+                # --- GROUPS ---
                 widget.TextBox("1", fontsize=32,
                     mouse_callbacks={"Button1": lazy.group["1"].toscreen()}),
 
@@ -97,8 +93,14 @@ screens = [
 
                 widget.Spacer(length=20),
 
-                widget.TextBox("Terminal", fontsize=30,
+                # --- LAUNCH ---
+                widget.TextBox("Term", fontsize=28,
                     mouse_callbacks={"Button1": lazy.spawn(terminal)}),
+
+                widget.Spacer(),
+
+                # --- CLOCK ---
+                widget.Clock(format="%H:%M"),
 
                 widget.Spacer(),
 
@@ -111,21 +113,17 @@ screens = [
 
                 widget.Spacer(length=20),
 
-                # --- CLOCK ---
-                widget.Clock(format="%H:%M"),
-
-                widget.Spacer(),
-
-                widget.TextBox("sleep", fontsize=28,
+                # --- SYSTEM ---
+                widget.TextBox("Sleep", fontsize=26,
                     mouse_callbacks={"Button1": lazy.spawn("xset dpms force off")}),
 
-                widget.TextBox("reboot", fontsize=28,
+                widget.TextBox("Reboot", fontsize=26,
                     mouse_callbacks={"Button1": lazy.spawn("systemctl reboot")}),
 
-                widget.TextBox("shutdown", fontsize=28,
+                widget.TextBox("Off", fontsize=26,
                     mouse_callbacks={"Button1": lazy.spawn("systemctl poweroff")}),
             ],
-            100,
+            180,
             background=colors["bg"],
         ),
     ),
