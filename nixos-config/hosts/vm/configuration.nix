@@ -10,6 +10,33 @@
       qtile-unwrapped = prev.qtile-unwrapped.overrideAttrs (_: {
         doCheck = false;
       });
+
+      python3Packages = prev.python3Packages.extend (pyFinal: pyPrev: {
+        turbojpeg = pyPrev.buildPythonPackage rec {
+          pname   = "PyTurboJPEG";
+          version = "1.7.6";
+          format  = "setuptools";
+
+          src = pyPrev.fetchPypi {
+            inherit pname version;
+            # Run the build once with this placeholder — Nix will error and
+            # print the correct hash; paste it here and rebuild.
+            hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+          };
+
+          # PyTurboJPEG uses ctypes to find libturbojpeg.so at runtime.
+          # On NixOS it won't be in a standard path, so patch it to the
+          # absolute store path of libjpeg_turbo.
+          postPatch = ''
+            substituteInPlace turbojpeg/turbojpeg.py \
+              --replace-fail \
+                'find_library("turbojpeg")' \
+                '"${prev.libjpeg_turbo.out}/lib/libturbojpeg.so"'
+          '';
+
+          pythonImportsCheck = [ "turbojpeg" ];
+        };
+      });
     })
   ];
 
@@ -49,6 +76,7 @@
     librsvg
     git
     neovim
+    ffmpeg   # required by Home Assistant tts / assist_pipeline
   ];
 
   programs.thunar.enable = true;
@@ -91,12 +119,16 @@
       pillow      # required — image handling in frontend
       sqlalchemy  # required — recorder / history database
       aiosqlite   # required — async SQLite access
+      turbojpeg   # required by camera component (packaged via overlay)
     ];
 
     extraComponents = [
-      "ai_task"       # loaded by default in 2026.x
-      "camera"        # ai_task imports camera — declaring it here pulls in turbojpeg
-      "conversation"  # always loaded by HA — must be here so hassil is bundled
+      "ai_task"          # loaded by default in 2026.x
+      "camera"           # ai_task imports camera — declaring it here pulls in turbojpeg
+      "ffmpeg"           # binary dep for tts / assist_pipeline
+      "tts"              # text-to-speech, pulled in by assist_pipeline
+      "assist_pipeline"  # voice assistant pipeline
+      "conversation"     # always loaded by HA — must be here so hassil is bundled
       "recorder"      # history DB — pulls in sqlalchemy/aiosqlite
       "history"
       "logbook"
