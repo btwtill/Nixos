@@ -53,10 +53,81 @@
 
   programs.thunar.enable = true;
 
+  # -------------------------------------------------------
+  # Home Assistant
+  # Accessible at http://localhost:8123 after first boot.
+  # Complete the onboarding wizard there to create your
+  # admin account and connect your Matter devices.
+  # -------------------------------------------------------
+  services.home-assistant = {
+    enable      = true;
+    openFirewall = true;         # opens TCP 8123
+
+    # Minimal declarative config — everything else is
+    # configured through the HA web UI and stored in
+    # /var/lib/hass (outside the Nix store, writable).
+    config = {
+      homeassistant = {
+        name        = "Home";
+        unit_system = "metric";
+        time_zone   = "Europe/Berlin";
+        currency    = "EUR";
+        country     = "DE";
+      };
+      http     = {};   # web UI + REST API on port 8123
+      api      = {};   # enables /api/* endpoints for our apps
+      frontend = {};   # Lovelace dashboard
+    };
+
+    # Extra HA integrations that need Python packages baked in.
+    # matter  — connects to python-matter-server for Matter devices
+    # light   — light entity platform
+    # climate — thermostat entity platform
+    extraComponents = [
+      "matter"
+      "light"
+      "climate"
+      "sensor"
+      "switch"
+      "automation"
+      "script"
+    ];
+  };
+
+  # -------------------------------------------------------
+  # Matter Server
+  # Bridges Home Assistant to Matter smart devices (lights,
+  # thermostats etc.) over WiFi/Thread via WebSocket on
+  # port 5580.  HA connects to it at ws://localhost:5580.
+  # -------------------------------------------------------
+  virtualisation.podman = {
+    enable       = true;
+    dockerCompat = true;   # lets you use `docker` CLI if needed
+  };
+
+  virtualisation.oci-containers = {
+    backend = "podman";
+    containers.matter-server = {
+      image     = "ghcr.io/home-assistant-libs/python-matter-server:stable";
+      autoStart = true;
+      volumes   = [ "/var/lib/matter-server:/data" ];
+      # host networking is required for mDNS / Matter device discovery
+      extraOptions = [
+        "--network=host"
+        "--privileged"
+      ];
+    };
+  };
+
+  # Ensure the Matter server data directory exists before the container starts
+  systemd.tmpfiles.rules = [
+    "d /var/lib/matter-server 0750 root root -"
+  ];
+
   # User
   users.users.defaultUser = {
     isNormalUser = true;
-    extraGroups = [ "wheel" ];
+    extraGroups  = [ "wheel" ];
     initialPassword = "password";
   };
 
