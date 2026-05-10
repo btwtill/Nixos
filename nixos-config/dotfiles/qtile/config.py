@@ -98,7 +98,12 @@ class SvgButton(base._Widget):
             ctx.set_source_surface(surf, 0, 0)
             ctx.paint()
             ctx.restore()
-        self.drawer.draw(offsetx=self.offsetx, offsety=self.offsety, width=self.width)
+        self.drawer.draw(
+            offsetx=self.offsetx,
+            offsety=self.offsety,
+            width=self.width,
+            height=self.calculate_length(),
+        )
 
     def button_press(self, _x, _y, button):
         if button == 1:
