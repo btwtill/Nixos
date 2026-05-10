@@ -77,6 +77,9 @@
       http     = {};   # web UI + REST API on port 8123
       api      = {};   # enables /api/* endpoints for our apps
       frontend = {};   # Lovelace dashboard
+
+      # Disable all analytics / telemetry — no data leaves the network
+      analytics = {};
     };
 
     # Extra HA integrations that need Python packages baked in.
@@ -84,6 +87,7 @@
     # light   — light entity platform
     # climate — thermostat entity platform
     extraComponents = [
+      "conversation"  # always loaded by HA — must be here so hassil is bundled
       "matter"
       "light"
       "climate"
@@ -133,6 +137,14 @@
 
   # Enable sudo
   security.sudo.wheelNeedsPassword = false;
+
+  # Block Home Assistant's outbound update-check calls.
+  # Uncomment once HA is confirmed working — the xt_owner kernel module
+  # must be available (it is on real hardware, may be absent in the VM).
+  # networking.firewall.extraCommands = ''
+  #   iptables -A OUTPUT -m owner --uid-owner hass -d version.home-assistant.io -j DROP
+  #   iptables -A OUTPUT -m owner --uid-owner hass -d analytics.home-assistant.io -j DROP
+  # '';
 
   # SSH (optional but useful)
   services.openssh.enable = true;
