@@ -33,7 +33,12 @@
   services.xserver.enable = true;
   services.xserver.xkb.layout = "de";
 
-  services.xserver.windowManager.qtile.enable = true;
+  services.xserver.windowManager.qtile = {
+    enable = true;
+    extraPackages = python3Packages: with python3Packages; [
+      cairosvg
+    ];
+  };
 
   services.getty.autologinUser = "defaultUser";
 
