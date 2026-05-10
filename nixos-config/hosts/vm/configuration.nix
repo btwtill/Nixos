@@ -11,7 +11,7 @@
         doCheck = false;
       });
 
-      python3Packages = prev.python3Packages.extend (pyFinal: pyPrev: {
+      python3Packages = prev.python3Packages.overrideScope (pyFinal: pyPrev: {
         turbojpeg = pyPrev.buildPythonPackage rec {
           pname   = "PyTurboJPEG";
           version = "1.7.6";
