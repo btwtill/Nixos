@@ -66,6 +66,15 @@
   # Enable sudo
   security.sudo.wheelNeedsPassword = false;
 
+  # Shared folder from UTM host via VirtFS (virtio-9p).
+  # In UTM settings → Sharing → set mode to VirtFS and pick a Mac folder.
+  # The folder appears at /mnt/mac inside the VM.
+  fileSystems."/mnt/mac" = {
+    device  = "share";
+    fsType  = "9p";
+    options = [ "trans=virtio" "version=9p2000.L" "nofail" "_netdev" ];
+  };
+
   # SSH (optional but useful)
   services.openssh.enable = true;
 
