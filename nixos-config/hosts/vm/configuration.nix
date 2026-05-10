@@ -66,6 +66,9 @@
 
   services.getty.autologinUser = "defaultUser";
 
+  # SPICE guest agent — enables clipboard sharing with the UTM host
+  services.spice-vdagentd.enable = true;
+
   # Basic packages for Qtile usability
   environment.systemPackages = with pkgs; [
     python313Packages.qtile
