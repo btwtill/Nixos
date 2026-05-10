@@ -29,7 +29,7 @@
             # PyTurboJPEG uses ctypes to find libturbojpeg.so at runtime.
             # Patch it to the absolute Nix store path so it works on NixOS.
             postPatch = ''
-              substituteInPlace turbojpeg/turbojpeg.py \
+              substituteInPlace turbojpeg.py \
                 --replace-fail \
                   'find_library("turbojpeg")' \
                   '"${prev.libjpeg_turbo.out}/lib/libturbojpeg.so"'
