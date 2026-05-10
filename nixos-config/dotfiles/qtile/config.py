@@ -116,7 +116,7 @@ class SvgButton(base._Widget):
             self.draw()
             if self._callback:
                 try:
-                    self._callback()
+                    self._callback(self.qtile)
                 except Exception as e:
                     logger.warning("SvgButton callback error: %s", e)
 
@@ -224,7 +224,7 @@ screens = [
 
                 widget.Spacer(length=10),
 
-                SvgButton(icon("Shutdown_Icon.svg"),   icon("Shutdown_Icon_Highlighted.svg"),
+                SvgButton(icon("Shutdown_Icon.svg"),  icon("Shutdown_Icon_Highlighted.svg"),
                     lazy.spawn("systemctl poweroff")),
             ],
             180,
