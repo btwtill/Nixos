@@ -57,13 +57,17 @@ class SvgButton(base._Widget):
 
     def _load_svg(self, path):
         try:
-            import cairosvg  #type: ignore
-            png = cairosvg.svg2png(
-                url=path,
-                output_width=self.icon_size,
-                output_height=self.icon_size,
+            result = subprocess.run(
+                [
+                    "rsvg-convert",
+                    "-w", str(self.icon_size),
+                    "-h", str(self.icon_size),
+                    path,
+                ],
+                capture_output=True,
+                check=True,
             )
-            return cairocffi.ImageSurface.create_from_png(io.BytesIO(png))
+            return cairocffi.ImageSurface.create_from_png(io.BytesIO(result.stdout))
         except Exception as e:
             logger.warning("SvgButton: could not load %s — %s", path, e)
             return None

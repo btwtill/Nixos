@@ -33,12 +33,7 @@
   services.xserver.enable = true;
   services.xserver.xkb.layout = "de";
 
-  services.xserver.windowManager.qtile = {
-    enable = true;
-    extraPackages = python3Packages: with python3Packages; [
-      cairosvg
-    ];
-  };
+  services.xserver.windowManager.qtile.enable = true;
 
   services.getty.autologinUser = "defaultUser";
 
@@ -51,6 +46,7 @@
     rofi
     nitrogen
     mousepad
+    librsvg
     git
     neovim
   ];
