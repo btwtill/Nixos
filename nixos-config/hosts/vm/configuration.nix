@@ -91,11 +91,11 @@
       pillow      # required — image handling in frontend
       sqlalchemy  # required — recorder / history database
       aiosqlite   # required — async SQLite access
-      turbojpeg   # required by ai_task component (2026.x+)
     ];
 
     extraComponents = [
-      "ai_task"       # loaded by default in 2026.x — needs turbojpeg
+      "ai_task"       # loaded by default in 2026.x
+      "camera"        # ai_task imports camera — declaring it here pulls in turbojpeg
       "conversation"  # always loaded by HA — must be here so hassil is bundled
       "recorder"      # history DB — pulls in sqlalchemy/aiosqlite
       "history"
