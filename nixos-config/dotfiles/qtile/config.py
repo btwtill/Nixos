@@ -93,7 +93,7 @@ class SvgButton(base._Widget):
             ctx = self.drawer.ctx
             ctx.save()
             # Centre the icon horizontally within the bar width
-            x = (self.bar.height - self.icon_size) / 2
+            x = (self.bar.width - self.icon_size) / 2
             ctx.translate(x, self.margin)
             ctx.set_source_surface(surf, 0, 0)
             ctx.paint()
