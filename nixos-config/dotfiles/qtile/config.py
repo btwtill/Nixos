@@ -98,7 +98,7 @@ class SvgButton(base._Widget):
             ctx.set_source_surface(surf, 0, 0)
             ctx.paint()
             ctx.restore()
-        self.drawer.draw(offsetx=self.offsetx, offsety=self.offsety, width=self.length)
+        self.drawer.draw(offsetx=self.offsetx, offsety=self.offsety, width=self.width)
 
     def button_press(self, _x, _y, button):
         if button == 1:
@@ -110,7 +110,10 @@ class SvgButton(base._Widget):
             self._pressed = False
             self.draw()
             if self._callback:
-                self._callback()
+                try:
+                    self._callback()
+                except Exception as e:
+                    logger.warning("SvgButton callback error: %s", e)
 
 # ----------------------
 # Startup Layout
