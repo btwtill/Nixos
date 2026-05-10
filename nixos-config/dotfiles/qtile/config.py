@@ -76,6 +76,12 @@ class SvgButton(base._Widget):
         base._Widget._configure(self, qtile, bar)
         self._surf_normal  = self._load_svg(self._path_normal)
         self._surf_pressed = self._load_svg(self._path_pressed)
+        logger.warning(
+            "SvgButton [%s]: normal=%s pressed=%s",
+            self._path_normal,
+            "OK" if self._surf_normal  else "FAILED",
+            "OK" if self._surf_pressed else "FAILED",
+        )
 
     def calculate_length(self):
         return self.icon_size + self.margin * 2
@@ -92,7 +98,7 @@ class SvgButton(base._Widget):
             ctx.set_source_surface(surf, 0, 0)
             ctx.paint()
             ctx.restore()
-        self.drawer.draw(offsetx=self.offset, offsety=self.offsety, width=self.width)
+        self.drawer.draw(offsetx=self.offsetx, offsety=self.offsety, width=self.length)
 
     def button_press(self, _x, _y, button):
         if button == 1:
