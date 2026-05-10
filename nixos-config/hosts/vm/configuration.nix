@@ -86,6 +86,10 @@
     # matter  — connects to python-matter-server for Matter devices
     # light   — light entity platform
     # climate — thermostat entity platform
+    extraPackages = python3Packages: with python3Packages; [
+      numpy
+    ];
+
     extraComponents = [
       "conversation"  # always loaded by HA — must be here so hassil is bundled
       "matter"
