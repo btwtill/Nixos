@@ -46,11 +46,16 @@ class SvgButton(base._Widget):
     ]
 
     def __init__(self, icon_normal, icon_pressed, callback, **config):
+        # Route callback through Qtile's own mouse_callbacks machinery so
+        # lazy calls are dispatched correctly without X11 re-entrancy issues.
+        mc = config.pop("mouse_callbacks", {})
+        mc["Button1"] = callback
+        config["mouse_callbacks"] = mc
+
         base._Widget.__init__(self, bar.CALCULATED, **config)
         self.add_defaults(SvgButton.defaults)
         self._path_normal  = icon_normal
         self._path_pressed = icon_pressed
-        self._callback     = callback
         self._pressed      = False
         self._surf_normal  = None
         self._surf_pressed = None
@@ -105,20 +110,16 @@ class SvgButton(base._Widget):
             height=self.calculate_length(),
         )
 
-    def button_press(self, _x, _y, button):
+    def button_press(self, x, y, button):
         if button == 1:
             self._pressed = True
             self.draw()
+        super().button_press(x, y, button)  # fires mouse_callbacks via Qtile's dispatcher
 
     def button_release(self, _x, _y, button):
         if button == 1:
             self._pressed = False
             self.draw()
-            if self._callback:
-                try:
-                    self._callback(self.qtile)
-                except Exception as e:
-                    logger.warning("SvgButton callback error: %s", e)
 
 # ----------------------
 # Startup Layout
