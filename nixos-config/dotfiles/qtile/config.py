@@ -177,6 +177,7 @@ for i in groups:
 layout_theme = {
     "border_width": 0,
     "margin": 15,
+    "ratio": 0.67,
 }
 
 layouts = [
@@ -214,19 +215,26 @@ screens = [
         right=bar.Bar(
             [
                 # --- GROUPS ---
+                widget.Spacer(),
                 SvgButton(icon("Home_Icon.svg"), icon("Home_Icon_Highlighted.svg"),
                     lazy.group["1"].toscreen()),
+                widget.Spacer(),
                 SvgButton(icon("LightBulb_Icon.svg"), icon("LightBulb_Icon_Highlighted.svg"),
                     lazy.group["2"].toscreen()),
+                widget.Spacer(),
                 SvgButton(icon("Heiz_Icon.svg"), icon("Heiz_Icon_Highlighted.svg"),
                     lazy.group["3"].toscreen()),
+                widget.Spacer(),
                 SvgButton(icon("Info_Icon.svg"), icon("Info_Icon_Highlighted.svg"),
                     lazy.group["4"].toscreen()),
 
-                widget.Spacer(length=10),
+                # larger gap separates navigation from system controls
+                widget.Spacer(),
+                widget.Spacer(),
 
                 SvgButton(icon("Shutdown_Icon.svg"),  icon("Shutdown_Icon_Highlighted.svg"),
                     lazy.spawn("systemctl poweroff")),
+                widget.Spacer(),
             ],
             180,
             background=colors["bg"],
