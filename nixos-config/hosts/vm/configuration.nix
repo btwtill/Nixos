@@ -11,10 +11,10 @@
         doCheck = false;
       });
 
-      # Override the Python interpreter so turbojpeg is visible to all
-      # consumers including the home-assistant module's extraPackages.
-      python3 = prev.python3.override {
-        packageOverrides = pyFinal: pyPrev: {
+      # pythonPackagesExtensions injects packages into every Python version's
+      # package set, including the one the home-assistant module uses internally.
+      pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
+        (pyFinal: pyPrev: {
           turbojpeg = pyPrev.buildPythonPackage rec {
             pname   = "PyTurboJPEG";
             version = "1.7.6";
@@ -22,7 +22,7 @@
 
             src = pyPrev.fetchPypi {
               inherit pname version;
-              # Placeholder — rebuild will fail with the correct hash.
+              # Placeholder — rebuild will print the correct hash.
               hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
             };
 
@@ -37,8 +37,8 @@
 
             pythonImportsCheck = [ "turbojpeg" ];
           };
-        };
-      };
+        })
+      ];
     })
   ];
 
