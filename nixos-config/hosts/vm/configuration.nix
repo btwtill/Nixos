@@ -23,7 +23,7 @@
             src = pyPrev.fetchPypi {
               inherit pname version;
               # Placeholder — rebuild will print the correct hash.
-              hash = "sha256-jCLBbxvcB2HPaimmnilfmkAsJ8+smUybKvbHRYp0v4g=";
+              hash = "sha256-jCLBbxvcB2HPaimmnilfmkAsJ8+smUybKvbHRYpOv4g=";
             };
 
             # PyTurboJPEG uses ctypes to find libturbojpeg.so at runtime.
