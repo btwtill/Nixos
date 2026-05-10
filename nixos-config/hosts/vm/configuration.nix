@@ -11,32 +11,34 @@
         doCheck = false;
       });
 
-      python3Packages = prev.python3Packages.overrideScope (pyFinal: pyPrev: {
-        turbojpeg = pyPrev.buildPythonPackage rec {
-          pname   = "PyTurboJPEG";
-          version = "1.7.6";
-          format  = "setuptools";
+      # Override the Python interpreter so turbojpeg is visible to all
+      # consumers including the home-assistant module's extraPackages.
+      python3 = prev.python3.override {
+        packageOverrides = pyFinal: pyPrev: {
+          turbojpeg = pyPrev.buildPythonPackage rec {
+            pname   = "PyTurboJPEG";
+            version = "1.7.6";
+            format  = "setuptools";
 
-          src = pyPrev.fetchPypi {
-            inherit pname version;
-            # Run the build once with this placeholder — Nix will error and
-            # print the correct hash; paste it here and rebuild.
-            hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+            src = pyPrev.fetchPypi {
+              inherit pname version;
+              # Placeholder — rebuild will fail with the correct hash.
+              hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+            };
+
+            # PyTurboJPEG uses ctypes to find libturbojpeg.so at runtime.
+            # Patch it to the absolute Nix store path so it works on NixOS.
+            postPatch = ''
+              substituteInPlace turbojpeg/turbojpeg.py \
+                --replace-fail \
+                  'find_library("turbojpeg")' \
+                  '"${prev.libjpeg_turbo.out}/lib/libturbojpeg.so"'
+            '';
+
+            pythonImportsCheck = [ "turbojpeg" ];
           };
-
-          # PyTurboJPEG uses ctypes to find libturbojpeg.so at runtime.
-          # On NixOS it won't be in a standard path, so patch it to the
-          # absolute store path of libjpeg_turbo.
-          postPatch = ''
-            substituteInPlace turbojpeg/turbojpeg.py \
-              --replace-fail \
-                'find_library("turbojpeg")' \
-                '"${prev.libjpeg_turbo.out}/lib/libturbojpeg.so"'
-          '';
-
-          pythonImportsCheck = [ "turbojpeg" ];
         };
-      });
+      };
     })
   ];
 
