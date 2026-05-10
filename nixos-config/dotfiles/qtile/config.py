@@ -8,6 +8,7 @@ from collections import deque
 import cairocffi  #type: ignore
 import subprocess
 import threading
+import shlex
 import io
 import os
 
@@ -265,7 +266,7 @@ def autostart():
         import time
         time.sleep(1)
         for _, cmd in startup_layout:
-            subprocess.Popen([cmd])
+            subprocess.Popen(shlex.split(cmd))
             time.sleep(0.25)
 
     threading.Thread(target=_spawn_startup, daemon=True).start()
