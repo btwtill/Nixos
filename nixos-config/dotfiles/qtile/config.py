@@ -216,7 +216,7 @@ screens = [
             [
                 # --- GROUPS ---
                 widget.Spacer(),
-                SvgButton(icon("Home_Icon.svg"), icon("Home_Icon_Highlighted.svg"),
+                SvgButton(icon("Home_Icon_V002.svg"), icon("Home_Icon_Highlighted.svg"),
                     lazy.group["1"].toscreen()),
                 widget.Spacer(),
                 SvgButton(icon("LightBulb_Icon.svg"), icon("LightBulb_Icon_Highlighted.svg"),
