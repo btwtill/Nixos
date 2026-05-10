@@ -40,7 +40,7 @@ colors = {
 # ----------------------
 class SvgButton(base._Widget):
     defaults = [
-        ("icon_size", 80, "Icon render size in pixels"),
+        ("icon_size", 120, "Icon render size in pixels"),
         ("margin",    15, "Margin around icon"),
         ("background", None, "Background color (None = bar background)"),
     ]
@@ -216,7 +216,7 @@ screens = [
             [
                 # --- GROUPS ---
                 widget.Spacer(),
-                SvgButton(icon("Home_Icon_V002.svg"), icon("Home_Icon_Highlighted.svg"),
+                SvgButton(icon("Home_Icon.svg"), icon("Home_Icon_Highlighted.svg"),
                     lazy.group["1"].toscreen()),
                 widget.Spacer(),
                 SvgButton(icon("LightBulb_Icon.svg"), icon("LightBulb_Icon_Highlighted.svg"),
