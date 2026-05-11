@@ -114,11 +114,6 @@
 
   systemd.tmpfiles.rules = [
     "d /var/lib/matter-server 0750 root root -"
-  ];
-
-  # Prevent HA from failing on first boot because automations.yaml
-  # doesn't exist yet (created empty, HA populates it via the UI)
-  systemd.tmpfiles.rules = [
     "f ${config.services.home-assistant.configDir}/automations.yaml 0644 hass hass"
   ];
 
