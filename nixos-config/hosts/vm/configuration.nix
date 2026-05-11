@@ -87,6 +87,35 @@
     };
   };
 
+  # -------------------------------------------------------
+  # Matter Server
+  # Bridges HA to your Matter smart devices over local
+  # WiFi/Thread. HA connects to it at ws://localhost:5580.
+  # After rebuild: HA → Settings → Devices → Add Integration
+  # → Matter (BETA) → point it at ws://localhost:5580
+  # -------------------------------------------------------
+  virtualisation.podman = {
+    enable      = true;
+    dockerCompat = true;
+  };
+
+  virtualisation.oci-containers = {
+    backend = "podman";
+    containers.matter-server = {
+      image     = "ghcr.io/home-assistant-libs/python-matter-server:stable";
+      autoStart = true;
+      volumes   = [ "/var/lib/matter-server:/data" ];
+      extraOptions = [
+        "--network=host"   # required for mDNS / Matter device discovery
+        "--privileged"     # required for Matter commissioning
+      ];
+    };
+  };
+
+  systemd.tmpfiles.rules = [
+    "d /var/lib/matter-server 0750 root root -"
+  ];
+
   # Prevent HA from failing on first boot because automations.yaml
   # doesn't exist yet (created empty, HA populates it via the UI)
   systemd.tmpfiles.rules = [
