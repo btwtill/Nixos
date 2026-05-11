@@ -56,6 +56,43 @@
 
   programs.thunar.enable = true;
 
+  # -------------------------------------------------------
+  # Home Assistant
+  # Access at http://localhost:8123 (from within the VM)
+  # or http://<vm-ip>:8123 from the Mac browser.
+  # Complete the onboarding wizard on first boot to create
+  # your admin account — all further config via the UI.
+  # -------------------------------------------------------
+  services.home-assistant = {
+    enable = true;
+    openFirewall = true;
+
+    extraComponents = [
+      # Required to complete the onboarding flow
+      "analytics"
+      "google_translate"
+      "met"
+      "radio_browser"
+      "shopping_list"
+      # Fast zlib compression (recommended by wiki)
+      "isal"
+      # Matter support for your smart devices
+      "matter"
+    ];
+
+    config = {
+      # default_config pulls in all base dependencies automatically —
+      # no need to manually specify numpy, turbojpeg, hassil etc.
+      default_config = {};
+    };
+  };
+
+  # Prevent HA from failing on first boot because automations.yaml
+  # doesn't exist yet (created empty, HA populates it via the UI)
+  systemd.tmpfiles.rules = [
+    "f ${config.services.home-assistant.configDir}/automations.yaml 0644 hass hass"
+  ];
+
   # User
   users.users.defaultUser = {
     isNormalUser = true;
