@@ -48,13 +48,20 @@
       vm = mkSystem {
         system = "aarch64-linux";
         hostname = "vm";
-        diskoConfig = ./hosts/vm/disko.nix;  # ← wired into nixosSystem for mounts
+        diskoConfig = ./hosts/vm/disko.nix;
+      };
+
+      pi = mkSystem {
+        system = "aarch64-linux";
+        hostname = "pi";
+        diskoConfig = ./hosts/pi/disko.nix;
       };
     };
 
     # ↓ This is what your nix run command actually reads
     diskoConfigurations = {
       vm = import ./hosts/vm/disko.nix;
+      pi = import ./hosts/pi/disko.nix;
     };
   };
 }
