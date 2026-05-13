@@ -63,5 +63,20 @@
       vm = import ./hosts/vm/disko.nix;
       pi = import ./hosts/pi/disko.nix;
     };
+
+    packages.aarch64-linux.piImage =
+      (nixpkgs.lib.nixosSystem {
+        system = "aarch64-linux";
+        modules = [
+          "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-aarch64.nix"
+          ./hosts/pi/configuration.nix
+          home-manager.nixosModules.home-manager
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.users.defaultUser = import ./home/user.nix;
+            sdImage.compressImage = false;
+          }
+        ];
+      }).config.system.build.sdImage;
   };
 }
