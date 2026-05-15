@@ -69,12 +69,20 @@
         system = "aarch64-linux";
         modules = [
           "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-aarch64.nix"
-          ./hosts/pi/configuration.nix
-          home-manager.nixosModules.home-manager
           {
-            home-manager.useGlobalPkgs = true;
-            home-manager.users.defaultUser = import ./home/user.nix;
+            boot.loader.grub.enable = false;
+            boot.loader.generic-extlinux-compatible.enable = true;
+            networking.hostName = "pi";
+            networking.networkmanager.enable = true;
+            services.openssh.enable = true;
+            users.users.defaultUser = {
+              isNormalUser = true;
+              extraGroups = [ "wheel" ];
+              initialPassword = "password";
+            };
+            security.sudo.wheelNeedsPassword = false;
             sdImage.compressImage = false;
+            system.stateVersion = "25.05";
           }
         ];
       }).config.system.build.sdImage;
