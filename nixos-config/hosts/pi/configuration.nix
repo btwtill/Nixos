@@ -1,4 +1,4 @@
-{ modulesPath, config, pkgs, ... }:
+{ config, pkgs, ... }:
 
 {
   nixpkgs.overlays = [
@@ -9,9 +9,13 @@
     })
   ];
 
-  # Pi 4 boot — no EFI, uses extlinux via U-Boot
+  # Pi 3B+ boot — no EFI, uses extlinux via U-Boot
   boot.loader.grub.enable = false;
   boot.loader.generic-extlinux-compatible.enable = true;
+  boot.tmp.cleanOnBoot = true;
+
+  # Broadcom WiFi/BT firmware — without this WiFi dies after rebuild
+  hardware.enableRedistributableFirmware = true;
 
   # Host
   networking.hostName = "pi";
@@ -51,6 +55,8 @@
 
   # -------------------------------------------------------
   # Home Assistant
+  # Access at http://<pi-ip>:8123
+  # Complete the onboarding wizard on first boot.
   # -------------------------------------------------------
   services.home-assistant = {
     enable       = true;
@@ -78,6 +84,9 @@
 
   # -------------------------------------------------------
   # Matter Server
+  # HA connects to it at ws://localhost:5580.
+  # After rebuild: HA → Settings → Devices → Add Integration
+  # → Matter (BETA) → point it at ws://localhost:5580
   # -------------------------------------------------------
   virtualisation.podman = {
     enable       = true;
@@ -107,6 +116,8 @@
   security.sudo.wheelNeedsPassword = false;
 
   services.openssh.enable = true;
+
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   system.stateVersion = "25.05";
 }

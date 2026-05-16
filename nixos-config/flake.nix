@@ -82,6 +82,7 @@
             };
             security.sudo.wheelNeedsPassword = false;
             sdImage.compressImage = false;
+            nix.settings.experimental-features = [ "nix-command" "flakes" ];
             system.stateVersion = "25.05";
           }
         ];
