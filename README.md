@@ -25,6 +25,12 @@
 
 Image file is at: `<result>/sd-image/*.img`
 
+Copy the image to the shared folder — run this **on the VM**, treating the symlink as a regular directory path:
+
+```bash
+cp <path-to-symlink>/sd-image/*.img <path-to-write-img-file>
+```
+
 ### Flashing (macOS)
 
 ```bash
