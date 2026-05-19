@@ -15,28 +15,45 @@
     };
   };
 
-  # ↓ disko explicitly destructured
   outputs = { self, nixpkgs, home-manager, disko, ... }:
   let
     mkSystem = { system, hostname, diskoConfig ? null, extraModules ? [] }:
       nixpkgs.lib.nixosSystem {
         inherit system;
-
         modules = [
           ./hosts/${hostname}/configuration.nix
-
           disko.nixosModules.disko
-
           home-manager.nixosModules.home-manager
           {
             home-manager.useGlobalPkgs = true;
             home-manager.users.defaultUser = import ./home/user.nix;
           }
         ]
-        # ↓ Only add the disko config module if one was provided for this host
         ++ (if diskoConfig != null then [ diskoConfig ] else [])
         ++ extraModules;
       };
+
+    # Shared base for all Pi SD images — adds the sd-image module on top of
+    # whatever modules are passed in.
+    mkPiImage = modules:
+      (nixpkgs.lib.nixosSystem {
+        system = "aarch64-linux";
+        modules = [
+          "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-aarch64.nix"
+          { sdImage.compressImage = false; }
+        ] ++ modules;
+      }).config.system.build.sdImage;
+
+    # The full Pi config modules (no disko — SD image handles partitioning).
+    piModules = [
+      ./hosts/pi/configuration.nix
+      home-manager.nixosModules.home-manager
+      {
+        home-manager.useGlobalPkgs = true;
+        home-manager.users.defaultUser = import ./home/user.nix;
+      }
+    ];
+
   in {
     nixosConfigurations = {
 
@@ -51,6 +68,7 @@
         diskoConfig = ./hosts/vm/disko.nix;
       };
 
+      # Deploy target — use with: nixos-rebuild switch --flake .#pi
       pi = mkSystem {
         system = "aarch64-linux";
         hostname = "pi";
@@ -64,28 +82,29 @@
       pi = import ./hosts/pi/disko.nix;
     };
 
-    packages.aarch64-linux.piImage =
-      (nixpkgs.lib.nixosSystem {
-        system = "aarch64-linux";
-        modules = [
-          "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-aarch64.nix"
-          {
-            boot.loader.grub.enable = false;
-            boot.loader.generic-extlinux-compatible.enable = true;
-            networking.hostName = "pi";
-            networking.networkmanager.enable = true;
-            services.openssh.enable = true;
-            users.users.defaultUser = {
-              isNormalUser = true;
-              extraGroups = [ "wheel" ];
-              initialPassword = "password";
-            };
-            security.sudo.wheelNeedsPassword = false;
-            sdImage.compressImage = false;
-            nix.settings.experimental-features = [ "nix-command" "flakes" ];
-            system.stateVersion = "25.05";
-          }
-        ];
-      }).config.system.build.sdImage;
+    packages.aarch64-linux = {
+
+      # Minimal flash image — SSH + basic boot only, no user config.
+      # Build: nix build .#piImageMinimal
+      piImageMinimal = mkPiImage [{
+        boot.loader.grub.enable = false;
+        boot.loader.generic-extlinux-compatible.enable = true;
+        networking.hostName = "pi";
+        networking.networkmanager.enable = true;
+        services.openssh.enable = true;
+        users.users.defaultUser = {
+          isNormalUser = true;
+          extraGroups = [ "wheel" ];
+          initialPassword = "password";
+        };
+        security.sudo.wheelNeedsPassword = false;
+        nix.settings.experimental-features = [ "nix-command" "flakes" ];
+        system.stateVersion = "25.05";
+      }];
+
+      # Full flash image — all config baked in, ready to flash and boot.
+      # Build: nix build .#piImageFull
+      piImageFull = mkPiImage piModules;
+    };
   };
 }
