@@ -17,7 +17,7 @@
 
   outputs = { self, nixpkgs, home-manager, disko, ... }:
   let
-    mkSystem = { system, hostname, diskoConfig ? null, extraModules ? [] }:
+    mkSystem = { system, hostname, homeConfig, diskoConfig ? null, extraModules ? [] }:
       nixpkgs.lib.nixosSystem {
         inherit system;
         modules = [
@@ -26,7 +26,7 @@
           home-manager.nixosModules.home-manager
           {
             home-manager.useGlobalPkgs = true;
-            home-manager.users.defaultUser = import ./home/user.nix;
+            home-manager.users.defaultUser = import homeConfig;
           }
         ]
         ++ (if diskoConfig != null then [ diskoConfig ] else [])
@@ -50,7 +50,7 @@
       home-manager.nixosModules.home-manager
       {
         home-manager.useGlobalPkgs = true;
-        home-manager.users.defaultUser = import ./home/user.nix;
+        home-manager.users.defaultUser = import ./home/pi/user.nix;
       }
     ];
 
@@ -60,11 +60,13 @@
       laptop = mkSystem {
         system = "x86_64-linux";
         hostname = "laptop";
+        homeConfig = ./home/laptop/user.nix;
       };
 
       vm = mkSystem {
         system = "aarch64-linux";
         hostname = "vm";
+        homeConfig = ./home/vm/user.nix;
         diskoConfig = ./hosts/vm/disko.nix;
       };
 
@@ -72,6 +74,7 @@
       pi = mkSystem {
         system = "aarch64-linux";
         hostname = "pi";
+        homeConfig = ./home/pi/user.nix;
         diskoConfig = ./hosts/pi/disko.nix;
       };
     };
