@@ -41,7 +41,6 @@
     python313Packages.qtile
     alacritty
     chromium
-    picom
     rofi
     nitrogen
     mousepad
