@@ -136,9 +136,7 @@ class SvgButton(base._Widget):
 # Replace terminal with a specific app path when ready.
 # ----------------------
 startup_layout = [
-    ("1", terminal),   # home: master left
-    ("1", terminal),   # home: right top
-    ("1", terminal),   # home: right bottom
+    ("1", terminal),   # group 1
     ("2", terminal),   # group 2
     ("3", terminal),   # group 3
     ("4", "chromium --password-store=basic --no-default-browser-check"),  # group 4
