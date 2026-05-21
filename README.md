@@ -46,6 +46,40 @@ sudo dd if=/path/to/nixos-image.img of=/dev/rdiskN bs=4m status=progress
 
 Note the `r` prefix in `/dev/rdiskN` — raw device is significantly faster on macOS.
 
+### Debugging After a Rebuild
+
+```bash
+# Show all errors from the current boot
+journalctl -b -p err
+
+# Show failed systemd services
+systemctl --failed
+
+# Follow the live journal (useful right after boot)
+journalctl -f
+
+# Inspect a specific failing service
+journalctl -b -u <service-name>
+
+# Show last boot's errors (useful if system crashes on boot)
+journalctl -b -1 -p err
+```
+
+**Qtile / X11 logs:**
+```bash
+# Qtile log (errors, widget failures, config issues)
+cat ~/.local/share/qtile/qtile.log
+
+# Follow Qtile log live
+tail -f ~/.local/share/qtile/qtile.log
+
+# X server log (display/driver errors)
+cat ~/.local/share/xorg/Xorg.0.log | grep EE
+
+# Picom errors
+journalctl -b --user -u picom
+```
+
 ### Maintenance
 
 ```bash
