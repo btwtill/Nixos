@@ -32,9 +32,9 @@
   services.displayManager.autoLogin.enable = true;
   services.displayManager.autoLogin.user = "defaultUser";
 
-  services.xserver.displayManager.setupCommands = ''
-    xrandr --output Virtual-1 --mode 1360x768
-  '';
+  #services.xserver.displayManager.setupCommands = ''
+  #  xrandr --output Virtual-1 --mode 1360x768
+  #'';
 
   # Enable X11 + Qtile
   services.xserver.enable = true;
