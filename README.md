@@ -142,11 +142,23 @@ Navigate to "Activate a connection" → select your network → enter password.
 
 **Option B — command line:**
 ```bash
-nmcli device wifi connect "YOUR_SSID" password "YOUR_PASSWORD"
+# List available networks
+nmcli device wifi list
+
+# Connect
+sudo nmcli device wifi connect "YOUR_SSID" password "YOUR_PASSWORD"
 ```
 
 Verify it connected:
 ```bash
 nmcli connection show
 ip addr
+```
+
+#### SSH — Remove stale host key (after reflashing)
+
+Reflashing changes the Pi's host key, causing SSH to refuse the connection. Remove the old entry with:
+
+```bash
+ssh-keygen -R <pi-ip>
 ```
