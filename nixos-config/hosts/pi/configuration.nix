@@ -48,7 +48,6 @@
   environment.systemPackages = with pkgs; [
     python313Packages.qtile
     alacritty
-    chromium
     rofi
     unclutter
     nitrogen

@@ -139,7 +139,7 @@ startup_layout = [
     ("1", terminal),   # group 1
     ("2", terminal),   # group 2
     ("3", terminal),   # group 3
-    ("4", "chromium --password-store=basic --no-default-browser-check"),  # group 4
+    ("4", terminal),   # group 4
 ]
 
 _startup_queue = deque(group for group, _ in startup_layout)
