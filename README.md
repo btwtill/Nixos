@@ -129,3 +129,24 @@ Default credentials after first boot:
 - User: `defaultUser`
 - Password: `password`
 - SSH enabled on port 22
+
+#### WiFi Setup (first boot only)
+
+WiFi credentials are not stored in the repo. Connect once after flashing — the connection persists across all future rebuilds, only lost when reflashing.
+
+**Option A — interactive TUI (easiest):**
+```bash
+nmtui
+```
+Navigate to "Activate a connection" → select your network → enter password.
+
+**Option B — command line:**
+```bash
+nmcli device wifi connect "YOUR_SSID" password "YOUR_PASSWORD"
+```
+
+Verify it connected:
+```bash
+nmcli connection show
+ip addr
+```

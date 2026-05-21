@@ -12,10 +12,18 @@ import shlex
 import io
 import os
 
+import socket
+_hostname = socket.gethostname()
+
 mod = "mod4"
 terminal = guess_terminal()
 
 mouse = []
+
+# Per-host display sizing
+ICON_SIZE  = 65
+ICON_MARGIN = 8
+BAR_WIDTH  = 100
 
 # ----------------------
 # Icons
@@ -41,9 +49,9 @@ colors = {
 # ----------------------
 class SvgButton(base._Widget):
     defaults = [
-        ("icon_size", 120, "Icon render size in pixels"),
-        ("margin",    15, "Margin around icon"),
-        ("background", None, "Background color (None = bar background)"),
+        ("icon_size", ICON_SIZE,   "Icon render size in pixels"),
+        ("margin",    ICON_MARGIN, "Margin around icon"),
+        ("background", None,       "Background color (None = bar background)"),
     ]
 
     def __init__(self, icon_normal, icon_pressed, callback, **config):
@@ -237,7 +245,7 @@ screens = [
                     lazy.spawn("systemctl poweroff")),
                 widget.Spacer(),
             ],
-            180,
+            BAR_WIDTH,
             background=colors["bg"],
         ),
     ),
