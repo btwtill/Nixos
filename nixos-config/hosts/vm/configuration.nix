@@ -32,14 +32,13 @@
   services.displayManager.autoLogin.enable = true;
   services.displayManager.autoLogin.user = "defaultUser";
 
+  services.xserver.displayManager.setupCommands = ''
+    xrandr --output Virtual-1 --mode 1360x768
+  '';
+
   # Enable X11 + Qtile
   services.xserver.enable = true;
   services.xserver.xkb.layout = "de";
-  services.xserver.displayManager.setupCommands = ''
-    xrandr --newmode "1024x600_60.00" 49.00 1024 1072 1168 1312 600 603 613 624 -hsync +vsync
-    xrandr --addmode Virtual-1 "1024x600_60.00"
-    xrandr --output Virtual-1 --mode "1024x600_60.00"
-  '';
 
   services.xserver.windowManager.qtile.enable = true;
 
