@@ -21,9 +21,9 @@ terminal = guess_terminal()
 mouse = []
 
 # Per-host display sizing
-ICON_SIZE  = 65
-ICON_MARGIN = 8
-BAR_WIDTH  = 100
+ICON_SIZE   = 120
+ICON_MARGIN = 0
+BAR_WIDTH   = 180
 
 # ----------------------
 # Icons
@@ -223,27 +223,16 @@ screens = [
     Screen(
         right=bar.Bar(
             [
-                # --- GROUPS ---
-                widget.Spacer(),
                 SvgButton(icon("Home_Icon.svg"), icon("Home_Icon_Highlighted.svg"),
                     lazy.group["1"].toscreen()),
-                widget.Spacer(),
                 SvgButton(icon("LightBulb_Icon.svg"), icon("LightBulb_Icon_Highlighted.svg"),
                     lazy.group["2"].toscreen()),
-                widget.Spacer(),
                 SvgButton(icon("Heiz_Icon.svg"), icon("Heiz_Icon_Highlighted.svg"),
                     lazy.group["3"].toscreen()),
-                widget.Spacer(),
                 SvgButton(icon("Info_Icon.svg"), icon("Info_Icon_Highlighted.svg"),
                     lazy.group["4"].toscreen()),
-
-                # larger gap separates navigation from system controls
-                widget.Spacer(),
-                widget.Spacer(),
-
-                SvgButton(icon("Shutdown_Icon.svg"),  icon("Shutdown_Icon_Highlighted.svg"),
+                SvgButton(icon("Shutdown_Icon.svg"), icon("Shutdown_Icon_Highlighted.svg"),
                     lazy.spawn("systemctl poweroff")),
-                widget.Spacer(),
             ],
             BAR_WIDTH,
             background=colors["bg"],
