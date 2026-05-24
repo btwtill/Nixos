@@ -113,6 +113,11 @@
     };
   };
 
+  systemd.services.podman-matter-server = {
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+  };
+
   # User
   users.users.defaultUser = {
     isNormalUser = true;
