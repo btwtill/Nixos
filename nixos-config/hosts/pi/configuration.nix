@@ -24,6 +24,8 @@
 
   # Broadcom WiFi/BT firmware — without this WiFi dies after rebuild
   hardware.enableRedistributableFirmware = true;
+  hardware.bluetooth.enable = true;
+  hardware.bluetooth.powerOnBoot = true;
 
   # Host
   networking.hostName = "pi";
@@ -43,6 +45,12 @@
   services.xserver.windowManager.qtile.enable = true;
 
   services.getty.autologinUser = "defaultUser";
+
+  services.pipewire = {
+    enable = true;
+    alsa.enable = true;
+    pulse.enable = true;
+  };
 
   # Basic packages
   environment.systemPackages = with pkgs; [

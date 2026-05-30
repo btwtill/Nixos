@@ -227,7 +227,7 @@ screens = [
                     lazy.group["2"].toscreen()),
                 SvgButton(icon("Heiz_Icon.svg"), icon("Heiz_Icon_Highlighted.svg"),
                     lazy.group["3"].toscreen()),
-                SvgButton(icon("Info_Icon.svg"), icon("Info_Icon_Highlighted.svg"),
+                SvgButton(icon("Music_Icon.svg"), icon("Music_Icon_Highlighted.svg"),
                     lazy.group["4"].toscreen()),
                 SvgButton(icon("Shutdown_Icon.svg"), icon("Shutdown_Icon_Highlighted.svg"),
                     lazy.spawn("systemctl poweroff")),
