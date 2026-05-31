@@ -69,16 +69,15 @@
     enable = true;
     openFirewall = true;
     arguments = "-o pw --name 'VM Music'";
-  };
-
-  environment.etc."shairport-sync.conf".text = ''
-    metadata = {
-      enabled = "yes";
-      include_cover_art = "yes";
-      pipe_name = "/tmp/shairport-sync-metadata";
-      pipe_timeout = 5000;
+    settings = {
+      metadata = {
+        enabled = "yes";
+        include_cover_art = "yes";
+        pipe_name = "/tmp/shairport-sync-metadata";
+        pipe_timeout = 5000;
+      };
     };
-  '';
+  };
 
   # Basic packages for Qtile usability
   environment.systemPackages = with pkgs; [
