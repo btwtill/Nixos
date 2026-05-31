@@ -43,6 +43,43 @@
   # SPICE guest agent — enables clipboard sharing with the UTM host
   services.spice-vdagentd.enable = true;
 
+  services.pipewire = {
+    enable = true;
+    alsa.enable = true;
+    pulse.enable = true;
+  };
+
+  # Required for shairport-sync mDNS advertisement (AirPlay discovery)
+  services.avahi = {
+    enable = true;
+    nssmdns4 = true;
+    publish = {
+      enable = true;
+      addresses = true;
+      workstation = true;
+    };
+  };
+
+  # -------------------------------------------------------
+  # AirPlay receiver — lets iPhone stream Apple Music to VM
+  # Name visible on iPhone: "VM Music"
+  # Metadata pipe: /tmp/shairport-sync-metadata
+  # -------------------------------------------------------
+  services.shairport-sync = {
+    enable = true;
+    openFirewall = true;
+    arguments = "-o pw --name 'VM Music'";
+  };
+
+  environment.etc."shairport-sync.conf".text = ''
+    metadata = {
+      enabled = "yes";
+      include_cover_art = "yes";
+      pipe_name = "/tmp/shairport-sync-metadata";
+      pipe_timeout = 5000;
+    };
+  '';
+
   # Basic packages for Qtile usability
   environment.systemPackages = with pkgs; [
     python313Packages.qtile
@@ -55,6 +92,7 @@
     librsvg
     git
     neovim
+    (pkgs.callPackage ../../apps/music {})
   ];
 
   programs.thunar.enable = true;

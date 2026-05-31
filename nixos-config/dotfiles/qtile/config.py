@@ -136,10 +136,10 @@ class SvgButton(base._Widget):
 # Replace terminal with a specific app path when ready.
 # ----------------------
 startup_layout = [
-    ("1", terminal),   # group 1
-    ("2", terminal),   # group 2
-    ("3", terminal),   # group 3
-    ("4", terminal),   # group 4
+    ("1", terminal),      # group 1
+    ("2", terminal),      # group 2
+    ("3", terminal),      # group 3
+    ("4", "music-app"),   # group 4 — music player
 ]
 
 _startup_queue = deque(group for group, _ in startup_layout)
