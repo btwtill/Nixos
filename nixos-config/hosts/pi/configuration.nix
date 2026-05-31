@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 {
   nixpkgs.overlays = [
@@ -87,8 +87,8 @@
     after = [ "pipewire.service" "pipewire-pulse.service" "network-online.target" ];
     wants = [ "pipewire.service" "pipewire-pulse.service" ];
     serviceConfig = {
-      User = "defaultUser";
-      Group = "users";
+      User = lib.mkForce "defaultUser";
+      Group = lib.mkForce "users";
     };
     environment = {
       PIPEWIRE_RUNTIME_DIR = "/run/user/1000";
