@@ -68,7 +68,7 @@
   services.shairport-sync = {
     enable = true;
     openFirewall = true;
-    arguments = "-o pw --name 'VM Music'";
+    arguments = "-o pa --name 'VM Music'";
     settings = {
       metadata = {
         enabled = "yes";

@@ -71,7 +71,7 @@
   services.shairport-sync = {
     enable = true;
     openFirewall = true;
-    arguments = "-o pw --name 'Pi Music'";
+    arguments = "-o pa --name 'Pi Music'";
     settings = {
       metadata = {
         enabled = "yes";
