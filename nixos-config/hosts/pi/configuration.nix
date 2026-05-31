@@ -71,7 +71,7 @@
   services.shairport-sync = {
     enable = true;
     openFirewall = true;
-    arguments = "-o alsa --name 'Pi Music'";
+    arguments = "-o pipewire --name 'Pi Music'";
     settings = {
       metadata = {
         enabled = "yes";
@@ -79,6 +79,19 @@
         pipe_name = "/tmp/shairport-sync-metadata";
         pipe_timeout = 5000;
       };
+    };
+  };
+
+  # Run as defaultUser so it can reach the PipeWire session socket
+  systemd.services.shairport-sync = {
+    after = [ "pipewire.service" "pipewire-pulse.service" "network-online.target" ];
+    wants = [ "pipewire.service" "pipewire-pulse.service" ];
+    serviceConfig = {
+      User = "defaultUser";
+      Group = "users";
+    };
+    environment = {
+      PIPEWIRE_RUNTIME_DIR = "/run/user/1000";
     };
   };
 
