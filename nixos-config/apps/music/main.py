@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow
 
 from metadata import MetadataReader, TrackInfo
 from ui       import PlayerWidget
+import controls
 
 
 class MusicApp(QMainWindow):
@@ -33,8 +34,13 @@ class MusicApp(QMainWindow):
         self._player.update_track(info)
 
     def _on_control(self, action: str):
-        # TODO: wire up to MPRIS or shairport-sync control socket
-        print(f"[control] {action}")
+        {
+            "play_pause":  controls.play_pause,
+            "next":        controls.next_track,
+            "prev":        controls.prev_track,
+            "volume_up":   controls.volume_up,
+            "volume_down": controls.volume_down,
+        }.get(action, lambda: None)()
 
 
 def main():
