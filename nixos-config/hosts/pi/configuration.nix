@@ -126,6 +126,49 @@
     wants = [ "network-online.target" ];
   };
 
+  # -------------------------------------------------------
+  # WiFi credentials from USB stick
+  # Label a USB stick "WIFI-CFG" and put a wifi.json on it:
+  # { "ssid": "YourNetwork", "password": "yourpassword" }
+  # -------------------------------------------------------
+  systemd.services.wifi-from-usb = {
+    description = "Configure WiFi credentials from USB stick";
+    after = [ "NetworkManager.service" ];
+    before = [ "network-online.target" ];
+    wantedBy = [ "network-online.target" ];
+    serviceConfig.Type = "oneshot";
+    serviceConfig.RemainAfterExit = true;
+    path = [ pkgs.jq pkgs.util-linux pkgs.networkmanager ];
+    script = ''
+      MOUNT=/mnt/wifi-cfg
+      DEVICE=$(blkid -L "WIFI-CFG" 2>/dev/null)
+
+      if [ -z "$DEVICE" ]; then
+        echo "No WIFI-CFG USB stick found, skipping"
+        exit 0
+      fi
+
+      mkdir -p "$MOUNT"
+      mount -o ro "$DEVICE" "$MOUNT"
+
+      SSID=$(jq -r '.ssid' "$MOUNT/wifi.json")
+      PASS=$(jq -r '.password' "$MOUNT/wifi.json")
+
+      umount "$MOUNT"
+
+      if ! nmcli connection show "$SSID" &>/dev/null; then
+        nmcli connection add \
+          type wifi \
+          ssid "$SSID" \
+          wifi-sec.key-mgmt wpa-psk \
+          wifi-sec.psk "$PASS" \
+          connection.autoconnect yes
+      fi
+
+      nmcli connection up "$SSID" || true
+    '';
+  };
+
   # User
   users.users.defaultUser = {
     isNormalUser = true;
