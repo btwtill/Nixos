@@ -19,7 +19,6 @@
 
   services.xserver.displayManager.setupCommands = ''
     xrandr --output HDMI-1 --mode 1024x600
-    unclutter -idle 0 -root &
   '';
 
   # Broadcom WiFi/BT firmware — without this WiFi dies after rebuild
