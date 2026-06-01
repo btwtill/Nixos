@@ -109,6 +109,7 @@
     neovim
     ffmpeg
     (pkgs.callPackage ../../apps/music {})
+    (pkgs.callPackage ../../apps/screenshot {})
   ];
 
   programs.thunar.enable = true;
