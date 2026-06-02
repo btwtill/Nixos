@@ -19,6 +19,7 @@
 
   # Broadcom WiFi/BT firmware — without this WiFi dies after rebuild
   hardware.enableRedistributableFirmware = true;
+  hardware.firmware = with pkgs; [ linux-firmware raspberrypifw ];
   hardware.bluetooth.enable = true;
   hardware.bluetooth.powerOnBoot = true;
 
