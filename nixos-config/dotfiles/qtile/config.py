@@ -21,7 +21,7 @@ terminal = guess_terminal()
 mouse = []
 
 # Per-host display sizing
-ICON_SIZE   = 120
+ICON_SIZE   = 104
 ICON_MARGIN = 0
 BAR_WIDTH   = 180
 
@@ -49,9 +49,11 @@ colors = {
 # ----------------------
 class SvgButton(base._Widget):
     defaults = [
-        ("icon_size", ICON_SIZE,   "Icon render size in pixels"),
-        ("margin",    ICON_MARGIN, "Margin around icon"),
-        ("background", None,       "Background color (None = bar background)"),
+        ("icon_size",   ICON_SIZE,   "Icon size in pixels (width and height when icon_width/icon_height are not set)"),
+        ("icon_width",  None,        "Icon render width in pixels (overrides icon_size)"),
+        ("icon_height", None,        "Icon render height in pixels (overrides icon_size)"),
+        ("margin",      ICON_MARGIN, "Margin around icon"),
+        ("background",  None,        "Background color (None = bar background)"),
     ]
 
     def __init__(self, icon_normal, icon_pressed, callback, **config):
@@ -69,13 +71,19 @@ class SvgButton(base._Widget):
         self._surf_normal  = None
         self._surf_pressed = None
 
+    def _iw(self):
+        return self.icon_width if self.icon_width is not None else self.icon_size
+
+    def _ih(self):
+        return self.icon_height if self.icon_height is not None else self.icon_size
+
     def _load_svg(self, path):
         try:
             result = subprocess.run(
                 [
                     "rsvg-convert",
-                    "-w", str(self.icon_size),
-                    "-h", str(self.icon_size),
+                    "-w", str(self._iw()),
+                    "-h", str(self._ih()),
                     path,
                 ],
                 capture_output=True,
@@ -98,7 +106,11 @@ class SvgButton(base._Widget):
         )
 
     def calculate_length(self):
-        return self.icon_size + self.margin * 2
+        # Horizontal bars (top/bottom): length = widget width.
+        # Vertical bars (left/right):   length = widget height.
+        if self.bar.horizontal:
+            return self._iw() + self.margin * 2
+        return self._ih() + self.margin * 2
 
     def draw(self):
         self.drawer.clear(self.background or self.bar.background)
@@ -106,18 +118,30 @@ class SvgButton(base._Widget):
         if surf:
             ctx = self.drawer.ctx
             ctx.save()
-            # Centre the icon horizontally within the bar width
-            x = (self.bar.width - self.icon_size) / 2
-            ctx.translate(x, self.margin)
+            if self.bar.horizontal:
+                x = self.margin
+                y = (self.bar.size - self._ih()) / 2
+            else:
+                x = (self.bar.width - self._iw()) / 2
+                y = self.margin
+            ctx.translate(x, y)
             ctx.set_source_surface(surf, 0, 0)
             ctx.paint()
             ctx.restore()
-        self.drawer.draw(
-            offsetx=self.offsetx,
-            offsety=self.offsety,
-            width=self.width,
-            height=self.calculate_length(),
-        )
+        if self.bar.horizontal:
+            self.drawer.draw(
+                offsetx=self.offsetx,
+                offsety=self.offsety,
+                width=self.calculate_length(),
+                height=self.bar.size,
+            )
+        else:
+            self.drawer.draw(
+                offsetx=self.offsetx,
+                offsety=self.offsety,
+                width=self.width,
+                height=self.calculate_length(),
+            )
 
     def button_press(self, x, y, button):
         if button == 1:
@@ -217,19 +241,43 @@ widget_defaults = dict(
 #   reboot.svg    / reboot_pressed.svg
 #   power.svg     / power_pressed.svg
 # ----------------------
+BAR_HEIGHT = 40
+BTN_W      = 95
+BTN_H      = 40
+
 screens = [
     Screen(
+        top=bar.Bar(
+            [
+                SvgButton(icon("TopLeftEndButton.svg"), icon("TopLeftEndButton.svg"),
+                    lazy.spawn("echo top"),
+                    icon_width=BTN_W, icon_height=BTN_H),
+                widget.Spacer(),
+            ],
+            BAR_HEIGHT,
+            background=colors["bg"],
+        ),
+        bottom=bar.Bar(
+            [
+                SvgButton(icon("BottomLeftEndButton.svg"), icon("BottomLeftEndButton.svg"),
+                    lazy.spawn("echo bottom"),
+                    icon_width=BTN_W, icon_height=BTN_H),
+                widget.Spacer(),
+            ],
+            BAR_HEIGHT,
+            background=colors["bg"],
+        ),
         right=bar.Bar(
             [
-                SvgButton(icon("Home_Icon.svg"), icon("Home_Icon_Highlighted.svg"),
+                SvgButton(icon("Home_Button.svg"), icon("Home_Button_Highlighted.svg"),
                     lazy.group["1"].toscreen()),
-                SvgButton(icon("LightBulb_Icon.svg"), icon("LightBulb_Icon_Highlighted.svg"),
+                SvgButton(icon("LightBulb_Button.svg"), icon("LightBulb_Button_Highlighted.svg"),
                     lazy.group["2"].toscreen()),
-                SvgButton(icon("Heiz_Icon.svg"), icon("Heiz_Icon_Highlighted.svg"),
+                SvgButton(icon("Heiz_Button.svg"), icon("Heiz_Button_Highlighted.svg"),
                     lazy.group["3"].toscreen()),
-                SvgButton(icon("Music_Icon.svg"), icon("Music_Icon_Highlighted.svg"),
+                SvgButton(icon("Music_Button.svg"), icon("Music_Button_Highlighted.svg"),
                     lazy.group["4"].toscreen()),
-                SvgButton(icon("Shutdown_Icon.svg"), icon("Shutdown_Icon_Highlighted.svg"),
+                SvgButton(icon("Shutdown_Button.svg"), icon("Shutdown_Button_Highlighted.svg"),
                     lazy.spawn("systemctl poweroff")),
             ],
             BAR_WIDTH,
