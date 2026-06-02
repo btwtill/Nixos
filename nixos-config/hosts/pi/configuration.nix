@@ -17,10 +17,6 @@
   services.displayManager.autoLogin.enable = true;
   services.displayManager.autoLogin.user = "defaultUser";
 
-  services.xserver.displayManager.setupCommands = ''
-    xrandr --output HDMI-1 --mode 1024x600
-  '';
-
   # Broadcom WiFi/BT firmware — without this WiFi dies after rebuild
   hardware.enableRedistributableFirmware = true;
   hardware.bluetooth.enable = true;
