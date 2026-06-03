@@ -19,7 +19,17 @@
 
   # Broadcom WiFi/BT firmware — without this WiFi dies after rebuild
   hardware.enableRedistributableFirmware = true;
-  hardware.firmware = [ pkgs.linux-firmware ];
+  hardware.firmware = [
+    pkgs.linux-firmware
+    # BCM43430A1.hcd is in linux-firmware but zstd-compressed; the Pi kernel
+    # doesn't have CONFIG_FW_LOADER_COMPRESS_ZSTD so we decompress it manually.
+    (pkgs.runCommand "bcm43430-firmware" {} ''
+      mkdir -p $out/lib/firmware/brcm
+      ${pkgs.zstd}/bin/zstd -d \
+        ${pkgs.linux-firmware}/lib/firmware/brcm/BCM43430A1.hcd.zst \
+        -o $out/lib/firmware/brcm/BCM43430A1.hcd
+    '')
+  ];
   hardware.bluetooth.enable = true;
   hardware.bluetooth.powerOnBoot = true;
 
