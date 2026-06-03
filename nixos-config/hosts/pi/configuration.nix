@@ -21,13 +21,9 @@
   hardware.enableRedistributableFirmware = true;
   hardware.firmware = [
     pkgs.linux-firmware
-    # BCM43430A1.hcd is in linux-firmware but zstd-compressed; the Pi kernel
-    # doesn't have CONFIG_FW_LOADER_COMPRESS_ZSTD so we decompress it manually.
     (pkgs.runCommand "bcm43430-firmware" {} ''
       mkdir -p $out/lib/firmware/brcm
-      ${pkgs.zstd}/bin/zstd -d \
-        ${pkgs.linux-firmware}/lib/firmware/brcm/BCM43430A1.hcd.zst \
-        -o $out/lib/firmware/brcm/BCM43430A1.hcd
+      cp ${./firmware/BCM43430A1.hcd} $out/lib/firmware/brcm/BCM43430A1.hcd
     '')
   ];
   hardware.bluetooth.enable = true;
