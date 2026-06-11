@@ -109,5 +109,15 @@
       # Build: nix build .#piImageFull
       piImageFull = mkPiImage piModules;
     };
+
+    # Temporary debug output — remove after diagnosing initrd module list.
+    debug.aarch64-linux.piInitrdModules =
+      (nixpkgs.lib.nixosSystem {
+        system = "aarch64-linux";
+        modules = [
+          "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-aarch64.nix"
+          { sdImage.compressImage = false; }
+        ] ++ piModules;
+      }).config.boot.initrd.availableKernelModules;
   };
 }
