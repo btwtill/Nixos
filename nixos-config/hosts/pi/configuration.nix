@@ -14,10 +14,6 @@
   boot.loader.generic-extlinux-compatible.enable = true;
   boot.tmp.cleanOnBoot = true;
 
-  # Mainline kernel never reliably drives the onboard BCM43438 BT/UART —
-  # the RPi Foundation kernel carries the vendor patches that make it work.
-  boot.kernelPackages = pkgs.linuxKernel.packages.linux_rpi3;
-
   services.displayManager.autoLogin.enable = true;
   services.displayManager.autoLogin.user = "defaultUser";
 
