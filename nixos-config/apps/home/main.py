@@ -109,10 +109,20 @@ class HomeApp(QMainWindow):
 
 
 def main():
-    app = QApplication(sys.argv)
-    app.setApplicationName("Home")
-    HomeApp().show()
-    sys.exit(app.exec())
+    print("[home-app] starting", flush=True)
+    try:
+        app = QApplication(sys.argv)
+        app.setApplicationName("Home")
+        print("[home-app] QApplication created", flush=True)
+        window = HomeApp()
+        print("[home-app] window created", flush=True)
+        window.show()
+        print("[home-app] window shown — entering event loop", flush=True)
+        sys.exit(app.exec())
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
