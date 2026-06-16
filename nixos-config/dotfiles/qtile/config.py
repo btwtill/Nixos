@@ -160,7 +160,7 @@ class SvgButton(base._Widget):
 # Replace terminal with a specific app path when ready.
 # ----------------------
 startup_layout = [
-    ("1", terminal),      # group 1
+    ("1", "home-app"),    # group 1 — home control UI
     ("2", terminal),      # group 2
     ("3", terminal),      # group 3
     ("4", "music-app"),   # group 4 — music player

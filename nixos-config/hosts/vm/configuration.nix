@@ -106,6 +106,7 @@
     git
     neovim
     (pkgs.callPackage ../../apps/music {})
+    (pkgs.callPackage ../../apps/home {})
     (pkgs.callPackage ../../apps/screenshot {})
   ];
 
