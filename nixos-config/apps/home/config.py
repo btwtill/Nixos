@@ -21,8 +21,8 @@ class LightConfig:
     """
     name: str
     position: tuple[int, int]
-    icon_default: str = "floorplan/light_off.png"
-    icon_on:      str = "floorplan/light_on.png"
+    icon_default: str = "floorplan/floorplanbutton_dark_default.png"
+    icon_on:      str = "floorplan/floorplanbutton_dark_selected.png"
     icon_size: tuple[int, int] = (32, 32)
 
 
@@ -77,21 +77,21 @@ class ArcSliderConfig:
 LIGHT_SLIDER = ArcSliderConfig(
     center=(146, 122),          # circle centre inside the 293×245 widget cell
     radius=90,
-    start_angle=225,            # 7:30
-    end_angle=135,              # 4:30
+    start_angle=-45,
+    end_angle=-225,
     track_width=10,
     track_color="#252525",
     fill_color="#C8B09A",       # warm beige
-    bg_image="sliders/light_slider_bg.png",
-    handle_image="sliders/handle.png",
+    bg_image="sliders/sliderbackdrop_dark.png",
+    handle_image="sliders/sliderknob_dark.png",
     handle_size=(26, 26),
 )
 
 TEMP_SLIDER = ArcSliderConfig(
     center=(146, 122),
     radius=90,
-    start_angle=225,
-    end_angle=135,
+    start_angle=-45,
+    end_angle=-225,
     track_width=10,
     track_color="#252525",
     fill_color=[                # blue (cold) → purple → red (hot)
@@ -100,7 +100,7 @@ TEMP_SLIDER = ArcSliderConfig(
         (0.75, "#CC3020"),
         (1.00, "#FF1008"),
     ],
-    bg_image="sliders/temp_slider_bg.png",
-    handle_image="sliders/handle.png",
+    bg_image="sliders/sliderbackdrop_dark.png",
+    handle_image="sliders/sliderknob_dark.png",
     handle_size=(26, 26),
 )

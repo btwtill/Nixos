@@ -20,7 +20,7 @@ class FloorplanWidget(QWidget):
 
     def __init__(self, lights: list, assets: Path, parent=None):
         super().__init__(parent)
-        bg_path = assets / "floorplan" / "floorplan_bg.png"
+        bg_path = assets / "floorplan" / "Floorplan_dark_small.png"
         self._bg = QPixmap(str(bg_path))
         self._buttons: dict[str, ImageButton] = {}
 
