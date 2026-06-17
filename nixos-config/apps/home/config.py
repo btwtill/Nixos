@@ -23,7 +23,7 @@ class LightConfig:
     position: tuple[int, int]
     icon_default: str = "floorplan/floorplanbutton_dark_default.png"
     icon_on:      str = "floorplan/floorplanbutton_dark_selected.png"
-    icon_size: tuple[int, int] = (32, 32)
+    icon_size: tuple[int, int] = (70, 70)
 
 
 LIGHTS: list[LightConfig] = [
@@ -72,6 +72,7 @@ class ArcSliderConfig:
     bg_image:     str = ""
     handle_image: str = ""
     handle_size: tuple[int, int] = (26, 26)
+    clockwise: bool = True
 
 
 LIGHT_SLIDER = ArcSliderConfig(
@@ -84,7 +85,8 @@ LIGHT_SLIDER = ArcSliderConfig(
     fill_color="#C8B09A",       # warm beige
     bg_image="sliders/sliderbackdrop_dark.png",
     handle_image="sliders/sliderknob_dark.png",
-    handle_size=(26, 26),
+    handle_size=(40, 40),
+    clockwise=False,
 )
 
 TEMP_SLIDER = ArcSliderConfig(
@@ -102,5 +104,6 @@ TEMP_SLIDER = ArcSliderConfig(
     ],
     bg_image="sliders/sliderbackdrop_dark.png",
     handle_image="sliders/sliderknob_dark.png",
-    handle_size=(26, 26),
+    handle_size=(40, 40),
+    clockwise=False,
 )

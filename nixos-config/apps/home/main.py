@@ -20,7 +20,8 @@ class HomeWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(W, H)
-        self.setStyleSheet("background: #0E0E0E;")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setStyleSheet("background: transparent;")
 
         assets = config.ASSETS
 
@@ -35,6 +36,7 @@ class HomeWidget(QWidget):
             radius       = ls.radius,
             start_angle  = ls.start_angle,
             end_angle    = ls.end_angle,
+            clockwise    = ls.clockwise,
             track_width  = ls.track_width,
             track_color  = ls.track_color,
             fill_color   = ls.fill_color,
@@ -56,6 +58,7 @@ class HomeWidget(QWidget):
             radius       = ts.radius,
             start_angle  = ts.start_angle,
             end_angle    = ts.end_angle,
+            clockwise    = ts.clockwise,
             track_width  = ts.track_width,
             track_color  = ts.track_color,
             fill_color   = ts.fill_color,
@@ -102,8 +105,8 @@ class HomeApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Home")
-        # Remove this flag if you want a normal window frame:
-        # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCentralWidget(HomeWidget())
         self.setFixedSize(W, H)
 
