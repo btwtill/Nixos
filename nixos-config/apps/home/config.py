@@ -77,7 +77,7 @@ class ArcSliderConfig:
 
 LIGHT_SLIDER = ArcSliderConfig(
     center=(146, 122),          # circle centre inside the 293×245 widget cell
-    radius=80,
+    radius=85,
     start_angle=-25,
     end_angle=-310,
     track_width=10,
@@ -91,7 +91,7 @@ LIGHT_SLIDER = ArcSliderConfig(
 
 TEMP_SLIDER = ArcSliderConfig(
     center=(146, 122),
-    radius=80,
+    radius=85,
     start_angle=-25,
     end_angle=-310,
     track_width=10,
