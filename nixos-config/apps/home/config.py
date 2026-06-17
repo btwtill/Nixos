@@ -77,9 +77,9 @@ class ArcSliderConfig:
 
 LIGHT_SLIDER = ArcSliderConfig(
     center=(146, 122),          # circle centre inside the 293×245 widget cell
-    radius=90,
-    start_angle=-45,
-    end_angle=-225,
+    radius=110,
+    start_angle=-25,
+    end_angle=-325,
     track_width=10,
     track_color="#252525",
     fill_color="#C8B09A",       # warm beige
@@ -91,9 +91,9 @@ LIGHT_SLIDER = ArcSliderConfig(
 
 TEMP_SLIDER = ArcSliderConfig(
     center=(146, 122),
-    radius=90,
-    start_angle=-45,
-    end_angle=-225,
+    radius=110,
+    start_angle=-25,
+    end_angle=-325,
     track_width=10,
     track_color="#252525",
     fill_color=[                # blue (cold) → purple → red (hot)

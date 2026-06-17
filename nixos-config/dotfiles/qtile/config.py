@@ -207,6 +207,8 @@ for i in groups:
 # ----------------------
 layout_theme = {
     "border_width": 0,
+    "border_focus":  "#00000000",
+    "border_normal": "#00000000",
     "margin": 15,
     "ratio": 0.67,
 }
@@ -214,7 +216,7 @@ layout_theme = {
 layouts = [
     layout.MonadTall(**layout_theme),
     layout.Max(),
-    layout.Floating(border_width=0),
+    layout.Floating(border_width=0, border_focus="#00000000", border_normal="#00000000"),
 ]
 
 # ----------------------

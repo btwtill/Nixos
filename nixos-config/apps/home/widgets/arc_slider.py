@@ -151,7 +151,7 @@ class ArcSlider(QWidget):
         # will be concentric and share the same shape.
         if not self._bg_pix.isNull():
             iw, ih = self._bg_pix.width(), self._bg_pix.height()
-            scale  = min(self.width() / iw, self.height() / ih)
+            scale  = min(1.0, self.width() / iw, self.height() / ih)
             dw, dh = int(iw * scale), int(ih * scale)
             p.drawPixmap(
                 int(self._cx - dw / 2),
