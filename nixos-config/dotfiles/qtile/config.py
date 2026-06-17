@@ -164,6 +164,7 @@ startup_layout = [
     ("2", terminal),      # group 2
     ("3", terminal),      # group 3
     ("4", "music-app"),   # group 4 — music player
+    ("5", terminal)       # group 5 - terminal
 ]
 
 _startup_queue = deque(group for group, _ in startup_layout)
@@ -181,6 +182,7 @@ groups = [
     Group("2", layout="monadtall"),
     Group("3", layout="monadtall"),
     Group("4", layout="monadtall"),
+    Group("5", layout="monadtall")
 ]
 
 # ----------------------
@@ -251,8 +253,8 @@ screens = [
     Screen(
         top=bar.Bar(
             [
-                SvgButton(icon("TopLeftEndButton.svg"), icon("TopLeftEndButton.svg"),
-                    lazy.spawn("echo top"),
+                SvgButton(icon("Terminal_Button.svg"), icon("Terminal_Button_Highlighted.svg"),
+                    lazy.group["5"].toscreen(),
                     icon_width=BTN_W, icon_height=BTN_H),
                 widget.Spacer(),
             ],
@@ -261,7 +263,7 @@ screens = [
         ),
         bottom=bar.Bar(
             [
-                SvgButton(icon("BottomLeftEndButton.svg"), icon("BottomLeftEndButton.svg"),
+                SvgButton(icon("Bluetooth_Button.svg"), icon("Bluetooth_Button_Highlighted.svg"),
                     lazy.spawn("echo bottom"),
                     icon_width=BTN_W, icon_height=BTN_H),
                 widget.Spacer(),

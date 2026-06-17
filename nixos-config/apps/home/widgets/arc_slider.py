@@ -65,10 +65,12 @@ class ArcSlider(QWidget):
         bg_image: str = "",
         handle_image: str = "",
         handle_size: tuple = (26, 26),
+        bg_offset: tuple = (0, 0),
         parent=None,
     ):
         super().__init__(parent)
         self._cx, self._cy = float(center[0]), float(center[1])
+        self._bg_dx, self._bg_dy = int(bg_offset[0]), int(bg_offset[1])
         self._radius  = float(radius)
         self._start   = float(start_angle)
         self._end     = float(end_angle)
@@ -154,8 +156,8 @@ class ArcSlider(QWidget):
             scale  = min(1.0, self.width() / iw, self.height() / ih)
             dw, dh = int(iw * scale), int(ih * scale)
             p.drawPixmap(
-                int(self._cx - dw / 2),
-                int(self._cy - dh / 2),
+                int(self._cx - dw / 2) + self._bg_dx,
+                int(self._cy - dh / 2) + self._bg_dy,
                 self._bg_pix.scaled(
                     dw, dh,
                     Qt.AspectRatioMode.KeepAspectRatio,

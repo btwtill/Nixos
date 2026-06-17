@@ -73,6 +73,7 @@ class ArcSliderConfig:
     handle_image: str = ""
     handle_size: tuple[int, int] = (26, 26)
     clockwise: bool = True
+    bg_offset: tuple[int, int] = (0, 0)   # (dx, dy) applied to the backdrop image
 
 
 LIGHT_SLIDER = ArcSliderConfig(
@@ -87,6 +88,7 @@ LIGHT_SLIDER = ArcSliderConfig(
     handle_image="sliders/sliderknob_dark.png",
     handle_size=(40, 40),
     clockwise=False,
+    bg_offset=(0, 6),
 )
 
 TEMP_SLIDER = ArcSliderConfig(
@@ -106,4 +108,5 @@ TEMP_SLIDER = ArcSliderConfig(
     handle_image="sliders/sliderknob_dark.png",
     handle_size=(40, 40),
     clockwise=False,
+    bg_offset=(0, 6),
 )
