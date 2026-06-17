@@ -289,6 +289,16 @@ screens = [
 ]
 
 # ----------------------
+# Floating layout — must be set as a module-level variable; the Floating
+# entry in the layouts list above does NOT control floating window borders.
+# ----------------------
+floating_layout = layout.Floating(
+    border_width=0,
+    border_focus="#000000",
+    border_normal="#000000",
+)
+
+# ----------------------
 # General Settings
 # ----------------------
 follow_mouse_focus = True

@@ -74,7 +74,7 @@ class ArcSlider(QWidget):
         self._end     = float(end_angle)
         self._cw      = clockwise
         self._tw      = float(track_width)
-        self._tc      = QColor(track_color)
+        self._tc      = QColor(track_color) if track_color else None
         self._value   = 0.0
         self._hw, self._hh = handle_size
 
@@ -174,12 +174,14 @@ class ArcSlider(QWidget):
             self._radius * 2, self._radius * 2,
         )
 
-        # Full-range track
-        p.setPen(QPen(self._tc, self._tw,
-                      Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawArc(rect, int(round(qt_start * 16)),
-                  int(round(qt_dir * span * 16)))
+        # Full-range track — skipped when track_color is empty so the
+        # backdrop image provides the visual ring on its own.
+        if self._tc is not None:
+            p.setPen(QPen(self._tc, self._tw,
+                          Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawArc(rect, int(round(qt_start * 16)),
+                      int(round(qt_dir * span * 16)))
 
         # Fill arc (0 → current value)
         if self._value > 0.0:
