@@ -144,14 +144,21 @@ class ArcSlider(QWidget):
         p.fillRect(self.rect(), Qt.GlobalColor.transparent)
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
-        # Backdrop — stretched to fill the widget so center/radius map to
-        # widget pixels directly (no letterbox offset to account for).
+        # Backdrop — correct aspect ratio, centered on the circle centre.
+        # Scale to fit within the widget without distortion, then position
+        # so the image centre aligns with (cx, cy).  Assuming the ring in
+        # the backdrop image is itself centred in the image, the two circles
+        # will be concentric and share the same shape.
         if not self._bg_pix.isNull():
+            iw, ih = self._bg_pix.width(), self._bg_pix.height()
+            scale  = min(self.width() / iw, self.height() / ih)
+            dw, dh = int(iw * scale), int(ih * scale)
             p.drawPixmap(
-                0, 0,
+                int(self._cx - dw / 2),
+                int(self._cy - dh / 2),
                 self._bg_pix.scaled(
-                    self.width(), self.height(),
-                    Qt.AspectRatioMode.IgnoreAspectRatio,
+                    dw, dh,
+                    Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 ),
             )
