@@ -80,7 +80,7 @@ LIGHT_SLIDER = ArcSliderConfig(
     center=(146, 122),          # circle centre inside the 293×245 widget cell
     radius=85,
     start_angle=-25,
-    end_angle=-310,
+    end_angle=-300,
     track_width=10,
     track_color="",
     fill_color="#C8B09A",       # warm beige
@@ -88,14 +88,14 @@ LIGHT_SLIDER = ArcSliderConfig(
     handle_image="sliders/sliderknob_dark.png",
     handle_size=(40, 40),
     clockwise=False,
-    bg_offset=(0, 6),
+    bg_offset=(0, 4),
 )
 
 TEMP_SLIDER = ArcSliderConfig(
     center=(146, 122),
     radius=85,
     start_angle=-25,
-    end_angle=-310,
+    end_angle=-300,
     track_width=10,
     track_color="",
     fill_color=[                # blue (cold) → purple → red (hot)
@@ -108,5 +108,5 @@ TEMP_SLIDER = ArcSliderConfig(
     handle_image="sliders/sliderknob_dark.png",
     handle_size=(40, 40),
     clockwise=False,
-    bg_offset=(0, 6),
+    bg_offset=(0, 4),
 )
