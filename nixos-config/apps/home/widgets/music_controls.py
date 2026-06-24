@@ -5,10 +5,11 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout,
-    QLabel, QSlider,
+    QLabel,
 )
 
 from .image_button import ImageButton
+from .linear_slider import LinearSlider
 
 
 class MusicControls(QWidget):
@@ -50,9 +51,7 @@ class MusicControls(QWidget):
 
     def set_progress(self, t: float):
         """Set seek bar position (0.0–1.0) without emitting seek_changed."""
-        self._seek.blockSignals(True)
-        self._seek.setValue(int(t * 1000))
-        self._seek.blockSignals(False)
+        self._seek.set_value_silent(t)
 
     # ── internal ──────────────────────────────────────────────────────────────
 
@@ -111,39 +110,16 @@ class MusicControls(QWidget):
 
         right.addSpacing(16)
 
-        # Seek bar — backdrop image as the groove, knob image as the handle.
-        # Knob (39px) is taller than the backdrop (27px) so it protrudes
-        # symmetrically above/below via negative vertical margin.
-        backdrop = str(self._music / "VolumeSliderBackdrop.png")
-        knob     = str(self._music / "SliderKnob.png")
-        self._seek = QSlider(Qt.Orientation.Horizontal)
-        self._seek.setRange(0, 1000)
-        self._seek.setValue(0)
-        self._seek.setFixedHeight(39)
-        self._seek.setStyleSheet(f"""
-            QSlider::groove:horizontal {{
-                border-image: url("{backdrop}") 0 0 0 0 stretch stretch;
-                height: 27px;
-            }}
-            QSlider::sub-page:horizontal {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 rgba(200,200,200,235),
-                    stop:0.55 rgba(140,140,140,90),
-                    stop:1 rgba(90,90,90,0));
-                border-radius: 13px;
-                height: 27px;
-            }}
-            QSlider::add-page:horizontal {{
-                background: transparent;
-            }}
-            QSlider::handle:horizontal {{
-                image: url("{knob}");
-                width: 19px;
-                height: 39px;
-                margin: -6px 0;
-            }}
-        """)
-        self._seek.valueChanged.connect(lambda v: self.seek_changed.emit(v / 1000.0))
+        # Seek bar — backdrop + fill artwork (fill cropped to value, not
+        # stretched) + knob, all custom-painted by LinearSlider.
+        self._seek = LinearSlider(
+            bg_image     = str(self._music / "VolumeSliderBackdrop.png"),
+            fill_image   = str(self._music / "VolumeSliderAmount.png"),
+            handle_image = str(self._music / "SliderKnob.png"),
+            track_height = 20,
+            handle_size  = (19, 39),
+        )
+        self._seek.value_changed.connect(self.seek_changed.emit)
         right.addWidget(self._seek)
 
         right.addStretch(1)
