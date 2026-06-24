@@ -27,6 +27,8 @@ class MusicControls(QWidget):
         super().__init__(parent)
         self.setStyleSheet("background: transparent;")
         self._assets = assets
+        self._music  = assets / "music"
+        self._cover_placeholder = QPixmap(str(self._music / "MusicCover.png"))
         self._build_ui()
 
     # ── public ────────────────────────────────────────────────────────────────
@@ -35,15 +37,13 @@ class MusicControls(QWidget):
         if art_bytes:
             pix = QPixmap()
             pix.loadFromData(art_bytes)
-            self._cover.setPixmap(
-                pix.scaled(160, 160,
-                            Qt.AspectRatioMode.KeepAspectRatio,
-                            Qt.TransformationMode.SmoothTransformation)
-            )
-            self._cover.setText("")
         else:
-            self._cover.setPixmap(QPixmap())
-            self._cover.setText("♪")
+            pix = self._cover_placeholder
+        self._cover.setPixmap(
+            pix.scaled(180, 180,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation)
+        )
 
     def set_playing(self, playing: bool):
         self._btn_play.setChecked(playing)
@@ -57,11 +57,10 @@ class MusicControls(QWidget):
     # ── internal ──────────────────────────────────────────────────────────────
 
     def _btn(self, default_file: str, active_file: str,
-              label: str, size=(60, 60)) -> ImageButton:
-        music = self._assets / "music"
+              label: str, size=(64, 64)) -> ImageButton:
         return ImageButton(
-            default_image=str(music / default_file),
-            active_image =str(music / active_file),
+            default_image=str(self._music / default_file),
+            active_image =str(self._music / active_file),
             size=size, label=label,
         )
 
@@ -71,14 +70,16 @@ class MusicControls(QWidget):
         root.setSpacing(24)
 
         # ── Album art ─────────────────────────────────────────────────────────
-        self._cover = QLabel("♪")
-        self._cover.setFixedSize(160, 160)
+        self._cover = QLabel()
+        self._cover.setFixedSize(180, 180)
         self._cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cover.setStyleSheet(
-            "background: #1A1A1A;"
-            "border-radius: 12px;"
-            "color: #555555;"
-            "font-size: 48px;"
+        self._cover.setStyleSheet("background: transparent;")
+        self._cover.setPixmap(
+            self._cover_placeholder.scaled(
+                180, 180,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
         )
         root.addWidget(self._cover, 0)
 
@@ -94,10 +95,10 @@ class MusicControls(QWidget):
         row.setSpacing(16)
         row.addStretch(1)
 
-        self._btn_prev = self._btn("prev_default.png", "prev_pressed.png", "⏮")
-        self._btn_play = self._btn("play_default.png", "play_pressed.png", "▶")
+        self._btn_prev = self._btn("Backward_Button.png", "Backward_Button.png", "⏮")
+        self._btn_play = self._btn("Play_Button.png", "Play_Button.png", "▶")
         self._btn_play.setCheckable(True)   # checked = currently playing
-        self._btn_next = self._btn("next_default.png", "next_pressed.png", "⏭")
+        self._btn_next = self._btn("Forward_Button.png", "Forward_Button.png", "⏭")
 
         self._btn_prev.clicked.connect(lambda: self.control_pressed.emit("prev"))
         self._btn_play.clicked.connect(lambda: self.control_pressed.emit("play_pause"))
@@ -110,27 +111,29 @@ class MusicControls(QWidget):
 
         right.addSpacing(16)
 
-        # Seek bar — basic styled QSlider; will be replaced with custom widget
+        # Seek bar — backdrop image as the groove, knob image as the handle.
+        # Knob (39px) is taller than the backdrop (27px) so it protrudes
+        # symmetrically above/below via negative vertical margin.
+        backdrop = str(self._music / "VolumeSliderBackdrop.png")
+        knob     = str(self._music / "SliderKnob.png")
         self._seek = QSlider(Qt.Orientation.Horizontal)
         self._seek.setRange(0, 1000)
         self._seek.setValue(0)
-        self._seek.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 4px;
-                background: #333333;
-                border-radius: 2px;
-            }
-            QSlider::sub-page:horizontal {
-                background: #888888;
-                border-radius: 2px;
-            }
-            QSlider::handle:horizontal {
-                width: 14px;
-                height: 14px;
-                background: #CCCCCC;
-                border-radius: 7px;
-                margin: -5px 0;
-            }
+        self._seek.setFixedHeight(39)
+        self._seek.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                border-image: url("{backdrop}") 0 0 0 0 stretch stretch;
+                height: 27px;
+            }}
+            QSlider::sub-page:horizontal, QSlider::add-page:horizontal {{
+                background: transparent;
+            }}
+            QSlider::handle:horizontal {{
+                image: url("{knob}");
+                width: 19px;
+                height: 39px;
+                margin: -6px 0;
+            }}
         """)
         self._seek.valueChanged.connect(lambda v: self.seek_changed.emit(v / 1000.0))
         right.addWidget(self._seek)
