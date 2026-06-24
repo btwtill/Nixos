@@ -57,7 +57,7 @@ class MusicControls(QWidget):
     # ── internal ──────────────────────────────────────────────────────────────
 
     def _btn(self, default_file: str, active_file: str,
-              label: str, size=(64, 64)) -> ImageButton:
+              label: str, size=(80, 80)) -> ImageButton:
         return ImageButton(
             default_image=str(self._music / default_file),
             active_image =str(self._music / active_file),
@@ -92,13 +92,13 @@ class MusicControls(QWidget):
 
         # Transport row
         row = QHBoxLayout()
-        row.setSpacing(16)
+        row.setSpacing(12)
         row.addStretch(1)
 
-        self._btn_prev = self._btn("Backward_Button.png", "Backward_Button.png", "⏮")
-        self._btn_play = self._btn("Play_Button.png", "Play_Button.png", "▶")
+        self._btn_prev = self._btn("Backward_Button.png", "Backward_Button_Pushed.png", "⏮")
+        self._btn_play = self._btn("Play_Button.png", "Play_Button_Pushed.png", "▶")
         self._btn_play.setCheckable(True)   # checked = currently playing
-        self._btn_next = self._btn("Forward_Button.png", "Forward_Button.png", "⏭")
+        self._btn_next = self._btn("Forward_Button.png", "Forward_Button_Pushed.png", "⏭")
 
         self._btn_prev.clicked.connect(lambda: self.control_pressed.emit("prev"))
         self._btn_play.clicked.connect(lambda: self.control_pressed.emit("play_pause"))
