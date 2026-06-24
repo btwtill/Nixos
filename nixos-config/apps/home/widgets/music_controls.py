@@ -125,7 +125,15 @@ class MusicControls(QWidget):
                 border-image: url("{backdrop}") 0 0 0 0 stretch stretch;
                 height: 27px;
             }}
-            QSlider::sub-page:horizontal, QSlider::add-page:horizontal {{
+            QSlider::sub-page:horizontal {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(200,200,200,235),
+                    stop:0.55 rgba(140,140,140,90),
+                    stop:1 rgba(90,90,90,0));
+                border-radius: 13px;
+                height: 27px;
+            }}
+            QSlider::add-page:horizontal {{
                 background: transparent;
             }}
             QSlider::handle:horizontal {{
