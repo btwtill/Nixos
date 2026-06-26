@@ -118,6 +118,10 @@
   # or http://<vm-ip>:8123 from the Mac browser.
   # Complete the onboarding wizard on first boot to create
   # your admin account — all further config via the UI.
+  # The "demo" component auto-loads a set of fake lights,
+  # switches, sensors, climate, media_player, etc. on boot —
+  # no UI step needed — so apps can be developed against the
+  # real REST + WebSocket API without physical hardware.
   # -------------------------------------------------------
   services.home-assistant = {
     enable = true;
@@ -134,12 +138,16 @@
       "isal"
       # Matter support for your smart devices
       "matter"
+      # Fake lights/switches/sensors/etc. for developing against
+      # the real REST + WebSocket API without physical hardware.
+      "demo"
     ];
 
     config = {
       # default_config pulls in all base dependencies automatically —
       # no need to manually specify numpy, turbojpeg, hassil etc.
       default_config = {};
+      demo = {};
     };
   };
 
