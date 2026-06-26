@@ -80,6 +80,25 @@ cat ~/.local/share/xorg/Xorg.0.log | grep EE
 journalctl -b --user -u picom
 ```
 
+**Home Assistant / Matter:**
+```bash
+# Home Assistant service status
+systemctl status home-assistant.service
+
+# Home Assistant live logs
+journalctl -u home-assistant.service -f
+
+# Matter server container status (podman-backed oci-container)
+systemctl status podman-matter-server.service
+
+# Matter server container logs
+journalctl -u podman-matter-server.service -f
+
+# Or inspect the container directly via podman
+podman ps
+podman logs -f matter-server
+```
+
 ### Maintenance
 
 ```bash

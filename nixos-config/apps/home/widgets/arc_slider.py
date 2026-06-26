@@ -89,6 +89,7 @@ class ArcSlider(QWidget):
 
         self._bg_pix     = QPixmap(bg_image)     if bg_image     else QPixmap()
         self._handle_pix = QPixmap(handle_image) if handle_image else QPixmap()
+        self._dragging   = False
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
@@ -106,6 +107,18 @@ class ArcSlider(QWidget):
             self._value = v
             self.update()
             self.value_changed.emit(v)
+
+    def set_value_silent(self, v: float):
+        """Update position without emitting value_changed (e.g. external sync)."""
+        v = max(0.0, min(1.0, float(v)))
+        if v != self._value:
+            self._value = v
+            self.update()
+
+    @property
+    def is_dragging(self) -> bool:
+        """True while the user is actively holding the handle."""
+        return self._dragging
 
     # ── geometry ──────────────────────────────────────────────────────────────
 
@@ -256,11 +269,16 @@ class ArcSlider(QWidget):
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
             self._set_from_pos(ev.position())
 
     def mouseMoveEvent(self, ev):
         if ev.buttons() & Qt.MouseButton.LeftButton:
             self._set_from_pos(ev.position())
+
+    def mouseReleaseEvent(self, ev):
+        if ev.button() == Qt.MouseButton.LeftButton:
+            self._dragging = False
 
     def _set_from_pos(self, pos: QPointF):
         dx = pos.x() - self._cx

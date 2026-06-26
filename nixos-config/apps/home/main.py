@@ -1,10 +1,12 @@
 import sys
-from PyQt6.QtCore import Qt
+import threading
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget
 
 from widgets.arc_slider     import ArcSlider
 from widgets.floorplan      import FloorplanWidget
 from widgets.music_controls import MusicControls
+from ha_client               import HAClient
 import config
 
 # Canvas dimensions (px)
@@ -16,6 +18,10 @@ ROW_H   = H // 2       # 245
 
 class HomeWidget(QWidget):
     """Root widget — places the four sections using absolute geometry."""
+
+    # Emitted from the HA-polling background thread; Qt auto-queues this
+    # onto the main thread since emitter and receiver live in different threads.
+    _brightness_polled = pyqtSignal(float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -78,6 +84,25 @@ class HomeWidget(QWidget):
         self._music.control_pressed.connect(self._on_music_ctrl)
         self._music.seek_changed.connect(self._on_seek)
 
+        # ── Home Assistant — brightness slider ↔ config.LIGHT_ENTITY ──────────
+        self._ha = HAClient(config.HA_URL, config.HA_TOKEN)
+        self._brightness_polled.connect(self._apply_polled_brightness)
+
+        # Debounce drag updates so we send one HA call after the user
+        # stops moving the handle, not on every intermediate value.
+        self._pending_brightness = 0.0
+        self._brightness_debounce = QTimer(self)
+        self._brightness_debounce.setSingleShot(True)
+        self._brightness_debounce.setInterval(150)
+        self._brightness_debounce.timeout.connect(self._send_brightness)
+
+        # Periodically pick up changes made outside the app (HA UI, automations).
+        self._poll_timer = QTimer(self)
+        self._poll_timer.setInterval(config.HA_POLL_INTERVAL_MS)
+        self._poll_timer.timeout.connect(self._poll_light_state)
+        self._poll_timer.start()
+        self._poll_light_state()
+
     # ── Handlers — wire to your home-automation backend here ─────────────────
 
     def _on_light_toggle(self, name: str, on: bool):
@@ -85,8 +110,28 @@ class HomeWidget(QWidget):
         print(f"[light]       {name!r} → {'on' if on else 'off'}")
 
     def _on_brightness(self, value: float):
-        # TODO: set light brightness (0-100)
-        print(f"[brightness]  {value:.0%}")
+        self._pending_brightness = value
+        self._brightness_debounce.start()
+
+    def _send_brightness(self):
+        pct = round(self._pending_brightness * 100)
+        threading.Thread(
+            target=self._ha.set_light_brightness,
+            args=(config.LIGHT_ENTITY, pct),
+            daemon=True,
+        ).start()
+
+    def _poll_light_state(self):
+        threading.Thread(target=self._poll_light_state_worker, daemon=True).start()
+
+    def _poll_light_state_worker(self):
+        pct = self._ha.get_light_brightness_pct(config.LIGHT_ENTITY)
+        if pct is not None:
+            self._brightness_polled.emit(pct)
+
+    def _apply_polled_brightness(self, pct: float):
+        if not self._light_sl.is_dragging:
+            self._light_sl.set_value_silent(pct)
 
     def _on_temperature(self, value: float):
         low, high = 16.0, 26.0

@@ -1,10 +1,43 @@
 """Home app configuration — edit this file to customise lights and sliders."""
 from __future__ import annotations
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Union
 
 ASSETS = Path(__file__).parent / "assets"
+
+
+# ── Home Assistant ──────────────────────────────────────────────────────────
+# Connection details are kept out of git. Create this file on the machine
+# running home-app (it is never read from the repo / Nix store):
+#
+#   ~/.config/home-app/secrets.json
+#   {
+#     "ha_url":   "http://<vm-ip>:8123",
+#     "ha_token": "<long-lived access token, from your HA profile page>"
+#   }
+
+SECRETS_PATH = Path.home() / ".config" / "home-app" / "secrets.json"
+
+
+def _load_secrets() -> dict:
+    try:
+        return json.loads(SECRETS_PATH.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+_secrets = _load_secrets()
+
+HA_URL   = _secrets.get("ha_url", "http://localhost:8123")
+HA_TOKEN = _secrets.get("ha_token", "")
+
+# Entity controlled by the brightness slider (top-right arc slider).
+LIGHT_ENTITY = "light.ceiling_lights"   # ← change to your real/demo entity id
+
+# How often to poll Home Assistant for external state changes (ms).
+HA_POLL_INTERVAL_MS = 3000
 
 
 # ── Lights ────────────────────────────────────────────────────────────────────
