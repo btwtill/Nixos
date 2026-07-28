@@ -43,6 +43,41 @@ class HAClient:
         except (urllib.error.URLError, OSError):
             return False
 
+    # ── weather ──────────────────────────────────────────────────────────────
+
+    def get_weather_state(self, entity_id: str) -> dict | None:
+        return self.get_state(entity_id)
+
+    def get_weather_forecast(self, entity_id: str) -> list | None:
+        """Hourly forecast list, or None if unavailable.
+
+        Tries the state attributes first (older HA / some integrations include
+        'forecast' there), then falls back to the HA 2023.9+ get_forecasts
+        service call whose response body contains the data directly.
+        """
+        state = self.get_state(entity_id)
+        if state is not None:
+            fc = state.get("attributes", {}).get("forecast")
+            if fc:
+                return fc
+        # HA 2023.9+: call the service and read the response body
+        req = urllib.request.Request(
+            f"{self._base}/api/services/weather/get_forecasts",
+            data=json.dumps({"entity_id": entity_id, "type": "hourly"}).encode(),
+            headers=self._headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                body = json.loads(resp.read())
+                if isinstance(body, dict) and entity_id in body:
+                    fc = body[entity_id].get("forecast")
+                    if fc:
+                        return fc
+        except (urllib.error.URLError, OSError, json.JSONDecodeError, AttributeError):
+            pass
+        return None
+
     # ── lights ───────────────────────────────────────────────────────────────
 
     def get_light_brightness_pct(self, entity_id: str) -> float | None:

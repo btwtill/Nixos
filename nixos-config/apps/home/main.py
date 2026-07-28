@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget
 
 from widgets.arc_slider     import ArcSlider
-from widgets.floorplan      import FloorplanWidget
+from widgets.weather        import WeatherWidget
 from widgets.music_controls import MusicControls
 from ha_client               import HAClient
 import config
@@ -19,9 +19,8 @@ ROW_H   = H // 2       # 245
 class HomeWidget(QWidget):
     """Root widget — places the four sections using absolute geometry."""
 
-    # Emitted from the HA-polling background thread; Qt auto-queues this
-    # onto the main thread since emitter and receiver live in different threads.
     _brightness_polled = pyqtSignal(float)
+    _weather_polled    = pyqtSignal(object)   # emits {condition, attrs, forecast}
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -31,9 +30,9 @@ class HomeWidget(QWidget):
 
         assets = config.ASSETS
 
-        # ── Top-left: floorplan with light buttons ────────────────────────────
-        self._floor = FloorplanWidget(config.LIGHTS, assets, parent=self)
-        self._floor.setGeometry(0, 0, LEFT_W, ROW_H)
+        # ── Top-left: weather dashboard ───────────────────────────────────────
+        self._weather = WeatherWidget(assets, parent=self)
+        self._weather.setGeometry(0, 0, LEFT_W, ROW_H)
 
         # ── Top-right: brightness arc slider ─────────────────────────────────
         ls = config.LIGHT_SLIDER
@@ -78,36 +77,35 @@ class HomeWidget(QWidget):
         self._temp_sl.setGeometry(LEFT_W, ROW_H, RIGHT_W, ROW_H)
 
         # ── Wire signals ──────────────────────────────────────────────────────
-        self._floor.light_toggled.connect(self._on_light_toggle)
         self._light_sl.value_changed.connect(self._on_brightness)
         self._temp_sl.value_changed.connect(self._on_temperature)
         self._music.control_pressed.connect(self._on_music_ctrl)
         self._music.seek_changed.connect(self._on_seek)
 
-        # ── Home Assistant — brightness slider ↔ config.LIGHT_ENTITY ──────────
+        # ── Home Assistant ─────────────────────────────────────────────────────
         self._ha = HAClient(config.HA_URL, config.HA_TOKEN)
-        self._brightness_polled.connect(self._apply_polled_brightness)
 
-        # Debounce drag updates so we send one HA call after the user
-        # stops moving the handle, not on every intermediate value.
+        # Brightness slider ↔ HA light
+        self._brightness_polled.connect(self._apply_polled_brightness)
         self._pending_brightness = 0.0
         self._brightness_debounce = QTimer(self)
         self._brightness_debounce.setSingleShot(True)
         self._brightness_debounce.setInterval(150)
         self._brightness_debounce.timeout.connect(self._send_brightness)
 
-        # Periodically pick up changes made outside the app (HA UI, automations).
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(config.HA_POLL_INTERVAL_MS)
         self._poll_timer.timeout.connect(self._poll_light_state)
         self._poll_timer.start()
         self._poll_light_state()
 
-    # ── Handlers — wire to your home-automation backend here ─────────────────
-
-    def _on_light_toggle(self, name: str, on: bool):
-        # TODO: publish to Home Assistant / MQTT
-        print(f"[light]       {name!r} → {'on' if on else 'off'}")
+        # Weather
+        self._weather_polled.connect(self._apply_weather)
+        self._weather_timer = QTimer(self)
+        self._weather_timer.setInterval(config.WEATHER_POLL_INTERVAL_MS)
+        self._weather_timer.timeout.connect(self._poll_weather)
+        self._weather_timer.start()
+        self._poll_weather()
 
     def _on_brightness(self, value: float):
         self._pending_brightness = value
@@ -132,6 +130,28 @@ class HomeWidget(QWidget):
     def _apply_polled_brightness(self, pct: float):
         if not self._light_sl.is_dragging:
             self._light_sl.set_value_silent(pct)
+
+    # ── weather ───────────────────────────────────────────────────────────────
+
+    def _poll_weather(self):
+        threading.Thread(target=self._poll_weather_worker, daemon=True).start()
+
+    def _poll_weather_worker(self):
+        state    = self._ha.get_weather_state(config.WEATHER_ENTITY)
+        forecast = self._ha.get_weather_forecast(config.WEATHER_ENTITY)
+        if state is not None:
+            self._weather_polled.emit({
+                "condition": state.get("state", ""),
+                "attrs":     state.get("attributes", {}),
+                "forecast":  forecast or [],
+            })
+
+    def _apply_weather(self, data: dict):
+        self._weather.update_weather(
+            condition = data["condition"],
+            attrs     = data["attrs"],
+            forecast  = data["forecast"],
+        )
 
     def _on_temperature(self, value: float):
         low, high = 16.0, 26.0

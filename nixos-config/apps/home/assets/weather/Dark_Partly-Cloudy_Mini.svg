@@ -1,0 +1,12 @@
+<svg width="20" height="14" viewBox="0 0 20 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M19 6H18" stroke="#4F4F4F" stroke-linecap="round"/>
+<path d="M14 1V2" stroke="#4F4F4F" stroke-linecap="round"/>
+<path d="M14 11V10" stroke="#4F4F4F" stroke-linecap="round"/>
+<path d="M9 6H10" stroke="#4F4F4F" stroke-linecap="round"/>
+<path d="M10.4648 2.46448L11.172 3.17158" stroke="#4F4F4F" stroke-linecap="round"/>
+<path d="M17.5352 2.4646L16.828 3.17171" stroke="#4F4F4F" stroke-linecap="round"/>
+<path d="M17.5352 9.53552L16.828 8.82842" stroke="#4F4F4F" stroke-linecap="round"/>
+<path d="M10.4648 9.53564L11.172 8.82854" stroke="#4F4F4F" stroke-linecap="round"/>
+<circle cx="14" cy="6" r="3" fill="#4F4F4F"/>
+<path d="M7.86441 4C9.69016 4 11.2522 5.2054 11.8927 6.91214C11.9952 6.90327 12.0988 6.89855 12.2034 6.89855C14.3002 6.89855 16 8.71537 16 10.9565C16 12.0211 15.6163 12.9897 14.9887 13.7135C14.8216 13.9062 14.5719 14 14.3169 14H1.46546C1.17508 14 0.893275 13.8776 0.729371 13.6379C0.270788 12.9673 0 12.1407 0 11.2464C0 9.02488 1.67011 7.22046 3.74153 7.18897C4.31076 5.33716 5.9414 4 7.86441 4Z" fill="#2F2F2F"/>
+</svg>

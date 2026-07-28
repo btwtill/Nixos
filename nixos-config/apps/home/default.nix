@@ -10,7 +10,11 @@ pkgs.stdenv.mkDerivation {
 
   src = ./.;
 
-  buildInputs = [ pyEnv ];
+  # wrapQtAppsHook auto-sets QT_PLUGIN_PATH so Qt discovers the SVG image
+  # plugin at runtime, allowing QPixmap to load .svg files without any
+  # extra Python imports.
+  nativeBuildInputs = [ pkgs.qt6.wrapQtAppsHook ];
+  buildInputs = [ pyEnv pkgs.qt6.qtsvg ];
 
   installPhase = ''
     mkdir -p $out/bin $out/lib/home-app
