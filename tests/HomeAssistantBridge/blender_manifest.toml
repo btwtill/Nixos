@@ -1,0 +1,19 @@
+schema_version = "1.0.0"
+
+id = "home_assistant_bridge"
+version = "0.1.0"
+name = "Home Assistant Bridge"
+tagline = "Live-link Home Assistant lights to Blender lights"
+maintainer = "Till <Till.Pfarr@web.de>"
+type = "add-on"
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+tags = ["Lighting", "System"]
+
+# Only stdlib (urllib) is used, so no wheels are required.
+
+[permissions]
+network = "Connect to a Home Assistant server to read light states"
