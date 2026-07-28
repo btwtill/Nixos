@@ -122,15 +122,18 @@ class WeatherWidget(QWidget):
             if base is None:
                 self._pix_cache[key] = None
             else:
-                path = self._assets / "weather" / f"{base}_{size}.svg"
-                if path.exists():
-                    pix = QPixmap(str(path))
-                    self._pix_cache[key] = (
-                        pix.scaled(sq, sq,
-                                   Qt.AspectRatioMode.KeepAspectRatio,
-                                   Qt.TransformationMode.SmoothTransformation)
-                        if not pix.isNull() else None
-                    )
+                # Nix build pre-converts SVGs → PNGs; fall back to SVG for dev runs
+                for ext in (".png", ".svg"):
+                    path = self._assets / "weather" / f"{base}_{size}{ext}"
+                    if path.exists():
+                        pix = QPixmap(str(path))
+                        if not pix.isNull():
+                            self._pix_cache[key] = pix.scaled(
+                                sq, sq,
+                                Qt.AspectRatioMode.KeepAspectRatio,
+                                Qt.TransformationMode.SmoothTransformation,
+                            )
+                            break
                 else:
                     self._pix_cache[key] = None
         return self._pix_cache[key]
@@ -145,13 +148,13 @@ class WeatherWidget(QWidget):
                 pix,
             )
         else:
-            # plain text fallback (no emoji dependency)
-            font = QFont()
-            font.setPixelSize(max(12, int(sq * 0.55)))
+            # Text fallback: show the condition name so it's legible during dev
+            label = condition.replace("-", "\n") if condition else "?"
+            font = QFont("Sans Serif")
+            font.setPixelSize(max(11, int(sq * 0.10)))
             p.setFont(font)
-            p.setPen(QColor("#CCCCCC"))
-            p.drawText(rect, Qt.AlignmentFlag.AlignCenter,
-                       _CONDITION_EMOJI.get(condition, "?"))
+            p.setPen(QColor("#888888"))
+            p.drawText(rect, Qt.AlignmentFlag.AlignCenter, label)
 
     # ── main paint ────────────────────────────────────────────────────────────
 
