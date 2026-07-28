@@ -40,7 +40,7 @@ LIGHT_ENTITY = "light.ceiling_lights"   # ← change to your real/demo entity id
 HA_POLL_INTERVAL_MS = 3000
 
 # Weather entity (met / weather integration in HA).
-WEATHER_ENTITY = "weather.home"
+WEATHER_ENTITY = "weather.demo_weather_north"
 
 # How often to refresh weather data (ms).  60 s is plenty for forecast data.
 WEATHER_POLL_INTERVAL_MS = 60_000
