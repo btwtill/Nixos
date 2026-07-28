@@ -139,6 +139,7 @@ class HomeWidget(QWidget):
     def _poll_weather_worker(self):
         state    = self._ha.get_weather_state(config.WEATHER_ENTITY)
         forecast = self._ha.get_weather_forecast(config.WEATHER_ENTITY)
+        print(f"[weather] entity={config.WEATHER_ENTITY!r} state={state}", flush=True)
         if state is not None:
             self._weather_polled.emit({
                 "condition": state.get("state", ""),
