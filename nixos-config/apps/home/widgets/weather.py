@@ -59,7 +59,7 @@ _METRICS = [
     ("pressure",    "",  "Attribute=Pressure.png"),
 ]
 
-_FADE_W = 30
+_FADE_W = 45
 
 
 def _lerp_color(a: QColor, b: QColor, t: float) -> QColor:

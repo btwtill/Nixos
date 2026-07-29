@@ -99,10 +99,11 @@ class HomeWidget(QWidget):
         self._poll_timer.start()
         self._poll_light_state()
 
-        # Weather
+        # Weather — start at 5 s retry cadence until first successful response,
+        # then switch to the normal 60 s interval.
         self._weather_polled.connect(self._apply_weather)
         self._weather_timer = QTimer(self)
-        self._weather_timer.setInterval(config.WEATHER_POLL_INTERVAL_MS)
+        self._weather_timer.setInterval(5_000)
         self._weather_timer.timeout.connect(self._poll_weather)
         self._weather_timer.start()
         self._poll_weather()
@@ -161,6 +162,9 @@ class HomeWidget(QWidget):
             attrs     = data["attrs"],
             forecast  = data["forecast"],
         )
+        # First successful response — slow down to normal poll interval
+        if self._weather_timer.interval() != config.WEATHER_POLL_INTERVAL_MS:
+            self._weather_timer.setInterval(config.WEATHER_POLL_INTERVAL_MS)
 
     def _on_temperature(self, value: float):
         low, high = 16.0, 26.0
