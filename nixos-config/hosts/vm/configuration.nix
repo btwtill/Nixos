@@ -93,6 +93,10 @@
     };
   };
 
+  fonts.packages = with pkgs; [
+    inter
+  ];
+
   # Basic packages for Qtile usability
   environment.systemPackages = with pkgs; [
     python313Packages.qtile

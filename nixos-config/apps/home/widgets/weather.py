@@ -17,8 +17,8 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QRectF, QPointF, QTimer
 from PyQt6.QtGui import (
-    QPainter, QPainterPath, QBrush,
-    QColor, QFont, QFontMetricsF, QLinearGradient, QPixmap,
+    QPainter,
+    QColor, QFont, QFontMetricsF, QPixmap,
 )
 from PyQt6.QtWidgets import QWidget
 
@@ -59,8 +59,7 @@ _METRICS = [
     ("pressure",    "",  "Attribute=Pressure.png"),
 ]
 
-_STRIP_BG = QColor(25, 25, 25, 210)
-_FADE_W   = 14
+_FADE_W = 30
 
 
 def _lerp_color(a: QColor, b: QColor, t: float) -> QColor:
@@ -77,7 +76,7 @@ class WeatherWidget(QWidget):
     _ICON_W   = 216
     _STRIP_H  = 90
     _STRIP_W  = 250
-    _SLOT_W   = 52    # fixed px width per slot — enables independent scrolling
+    _SLOT_W   = 42    # fixed px width per slot — enables independent scrolling
     _CYCLE_MS = 8_000
 
     def __init__(self, assets: Path, parent=None):
@@ -316,27 +315,32 @@ class WeatherWidget(QWidget):
         bg_x    = x + (w - strip_w) / 2
         pad_y   = 8
         bg_rect = QRectF(bg_x, y + pad_y, strip_w, h - pad_y * 2)
-        radius  = 13.0
-
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(_STRIP_BG)
-        p.drawRoundedRect(bg_rect, radius, radius)
 
         row_h  = bg_rect.height() / 3
         slot_w = float(self._SLOT_W)
 
+        font = QFont("Inter", 1, QFont.Weight.Bold)
+        font.setPointSize(15)
+
         p.save()
-        clip = QPainterPath()
-        clip.addRoundedRect(bg_rect, radius, radius)
-        p.setClipPath(clip)
+        p.setClipRect(bg_rect)
 
         for i, slot in enumerate(slots):
             sx = bg_rect.x() + i * slot_w - self._scroll_x
-            # Skip slots entirely outside the visible strip
             if sx + slot_w < bg_rect.x() or sx > bg_rect.right():
                 continue
             sy = bg_rect.y()
             sw = slot_w
+
+            # Fade to transparent over 30 px at each edge
+            center_in_strip = sx + sw / 2 - bg_rect.x()
+            if center_in_strip < _FADE_W:
+                opacity = max(0.0, center_in_strip / _FADE_W)
+            elif center_in_strip > strip_w - _FADE_W:
+                opacity = max(0.0, (strip_w - center_in_strip) / _FADE_W)
+            else:
+                opacity = 1.0
+            p.setOpacity(opacity)
 
             try:
                 dt       = datetime.fromisoformat(slot.get("datetime", ""))
@@ -349,10 +353,8 @@ class WeatherWidget(QWidget):
             temp_s = f"{int(round(temp))}°" if temp is not None else ""
 
             # Row 1 — hour label
-            f1 = QFont("Sans Serif")
-            f1.setPixelSize(11)
-            p.setFont(f1)
-            p.setPen(QColor(145, 145, 145))
+            p.setFont(font)
+            p.setPen(QColor("#2f2f2f"))
             p.drawText(QRectF(sx, sy, sw, row_h),
                        Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                        hour_lbl)
@@ -366,31 +368,11 @@ class WeatherWidget(QWidget):
                             cond, "Mini")
 
             # Row 3 — temperature
-            f3 = QFont("Sans Serif")
-            f3.setPixelSize(11)
-            p.setFont(f3)
-            p.setPen(QColor("#FFFFFF"))
+            p.setFont(font)
+            p.setPen(QColor("#2f2f2f"))
             p.drawText(QRectF(sx, sy + 2 * row_h, sw, row_h),
                        Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                        temp_s)
 
-        # Left and right edge fade overlay
-        fade_none = QColor(_STRIP_BG.red(), _STRIP_BG.green(), _STRIP_BG.blue(), 0)
-
-        for left in (True, False):
-            if left:
-                grad = QLinearGradient(bg_rect.left(), 0, bg_rect.left() + _FADE_W, 0)
-                grad.setColorAt(0.0, _STRIP_BG)
-                grad.setColorAt(1.0, fade_none)
-                fade_rect = QRectF(bg_rect.left(), bg_rect.top(), _FADE_W, bg_rect.height())
-            else:
-                grad = QLinearGradient(bg_rect.right() - _FADE_W, 0, bg_rect.right(), 0)
-                grad.setColorAt(0.0, fade_none)
-                grad.setColorAt(1.0, _STRIP_BG)
-                fade_rect = QRectF(bg_rect.right() - _FADE_W, bg_rect.top(), _FADE_W, bg_rect.height())
-
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(grad))
-            p.drawRect(fade_rect)
-
+        p.setOpacity(1.0)
         p.restore()
