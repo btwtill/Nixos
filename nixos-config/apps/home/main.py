@@ -146,7 +146,8 @@ class HomeWidget(QWidget):
             f.write(f"{datetime.datetime.now().isoformat()} "
                     f"condition={state.get('state') if state else None} "
                     f"forecast_slots={len(forecast) if forecast else 0} "
-                    f"forecast_sample={forecast[0] if forecast else None}\n")
+                    f"forecast_sample={forecast[0] if forecast else None} "
+                    f"fc_raw={getattr(self._ha, '_last_forecast_raw', '(no attr)')}\n")
         if state is not None:
             self._weather_polled.emit({
                 "condition": state.get("state", ""),

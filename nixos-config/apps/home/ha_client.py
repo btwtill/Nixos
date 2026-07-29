@@ -51,18 +51,20 @@ class HAClient:
     def get_weather_forecast(self, entity_id: str) -> list | None:
         """Hourly forecast list, or None if unavailable.
 
-        Tries the state attributes first (older HA / some integrations include
-        'forecast' there), then falls back to the HA 2023.9+ get_forecasts
-        service call whose response body contains the data directly.
+        Tries the state attributes first (older HA), then the HA 2024.3+
+        ?return_response service endpoint, returning the raw body to the
+        caller for debug logging.
         """
         state = self.get_state(entity_id)
         if state is not None:
             fc = state.get("attributes", {}).get("forecast")
             if fc:
                 return fc
-        # HA 2023.9+: call the service and read the response body
+        # HA 2024.3+: ?return_response returns the service response directly.
+        # Response body: {"service_response": {entity_id: {"forecast": [...]}},
+        #                 "changed_states": [...]}
         req = urllib.request.Request(
-            f"{self._base}/api/services/weather/get_forecasts",
+            f"{self._base}/api/services/weather/get_forecasts?return_response",
             data=json.dumps({"entity_id": entity_id, "type": "hourly"}).encode(),
             headers=self._headers,
             method="POST",
@@ -70,13 +72,18 @@ class HAClient:
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 body = json.loads(resp.read())
-                if isinstance(body, dict) and entity_id in body:
-                    fc = body[entity_id].get("forecast")
+                # unwrap service_response envelope if present
+                inner = body.get("service_response", body) if isinstance(body, dict) else body
+                if isinstance(inner, dict) and entity_id in inner:
+                    fc = inner[entity_id].get("forecast")
                     if fc:
                         return fc
-        except (urllib.error.URLError, OSError, json.JSONDecodeError, AttributeError):
-            pass
+                self._last_forecast_raw = repr(body)[:300]
+        except Exception as exc:
+            self._last_forecast_raw = repr(exc)[:300]
         return None
+
+    _last_forecast_raw: str = "(not called yet)"
 
     # ── lights ───────────────────────────────────────────────────────────────
 
