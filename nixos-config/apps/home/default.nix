@@ -10,9 +10,6 @@ pkgs.stdenv.mkDerivation {
 
   src = ./.;
 
-  # librsvg pre-converts all weather SVGs to PNGs at build time so
-  # QPixmap can load them without any Qt SVG plugin at runtime.
-  nativeBuildInputs = [ pkgs.librsvg ];
   buildInputs = [ pyEnv ];
 
   installPhase = ''
@@ -21,17 +18,6 @@ pkgs.stdenv.mkDerivation {
     cp *.py           $out/lib/home-app/
     cp -r widgets     $out/lib/home-app/
     cp -r assets      $out/lib/home-app/
-
-    # Convert weather SVGs → PNGs so QPixmap can load them without a Qt SVG plugin.
-    for svg in assets/weather/*.svg; do
-      name=$(basename "$svg" .svg)
-      out_path="$out/lib/home-app/assets/weather/$name.png"
-      if echo "$name" | grep -q "_Mini$"; then
-        rsvg-convert -w 32 -h 32 "$svg" -o "$out_path"
-      else
-        rsvg-convert -w 216 -h 216 "$svg" -o "$out_path"
-      fi
-    done
 
     cat > $out/bin/home-app <<EOF
     #!/bin/sh

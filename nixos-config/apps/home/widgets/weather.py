@@ -16,7 +16,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QRectF, QPointF, QTimer
 from PyQt6.QtGui import (
-    QPainter, QPainterPath, QPen, QBrush,
+    QPainter, QPainterPath, QBrush,
     QColor, QFont, QFontMetricsF, QLinearGradient, QPixmap,
 )
 from PyQt6.QtWidgets import QWidget
@@ -49,16 +49,16 @@ _CONDITION_EMOJI = {
     "sunny": "O",       "windy": "-",  "windy-variant": "-",
 }
 
-# (attr key, unit string, display name)
+# (attr key, unit suffix shown after number, asset filename)
 _METRICS = [
-    ("temperature", "°",      "temperature"),
-    ("humidity",    "%",      "humidity"),
-    ("wind_speed",  " km/h",  "wind"),
-    ("pressure",    " hPa",   "pressure"),
+    ("temperature", "",      "Attribute=Temperature.png"),
+    ("humidity",    "%",     "Attribute=Humidity.png"),
+    ("wind_speed",  "",      "Attribute=WindSpeed.png"),
+    ("pressure",    "",      "Attribute=Pressure.png"),
 ]
 
 _STRIP_BG = QColor(25, 25, 25, 210)
-_FADE_W   = 26
+_FADE_W   = 14
 
 
 def _lerp_color(a: QColor, b: QColor, t: float) -> QColor:
@@ -192,17 +192,41 @@ class WeatherWidget(QWidget):
 
     # ── attribute block ───────────────────────────────────────────────────────
 
+    def _attr_color(self, attr_key: str, value: float) -> QColor:
+        if attr_key == "temperature":
+            cold = QColor("#3860FF")
+            hot  = QColor("#FF3010")
+            frac = max(0.0, min(1.0, (value + 10) / 50))
+            return _lerp_color(cold, hot, frac)
+        return QColor("#FFFFFF")
+
+    def _load_attr_pixmap(self, icon_file: str, w: int, h: int) -> QPixmap | None:
+        key = f"attr/{icon_file}/{w}x{h}"
+        if key not in self._pix_cache:
+            path = self._assets / "weather" / icon_file
+            if path.exists():
+                pix = QPixmap(str(path))
+                self._pix_cache[key] = (
+                    pix.scaled(w, h,
+                               Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+                    if not pix.isNull() else None
+                )
+            else:
+                self._pix_cache[key] = None
+        return self._pix_cache[key]
+
     def _draw_attribute(self, p: QPainter, x, y, w, h):
-        attr_key, unit, _ = _METRICS[self._metric_idx]
+        attr_key, unit, icon_file = _METRICS[self._metric_idx]
         raw = self._attrs.get(attr_key)
         if raw is None:
             return
 
-        value    = float(raw)
-        num_str  = f"{int(round(value))}{unit}"
-        icon_w_  = 50
-        icon_h_  = 78
-        gap      = 14
+        value   = float(raw)
+        num_str = f"{int(round(value))}{unit}"
+        icon_w_ = 50
+        icon_h_ = 78
+        gap     = 14
 
         font = QFont("Sans Serif", 1, QFont.Weight.Bold)
         font.setPixelSize(58)
@@ -214,102 +238,16 @@ class WeatherWidget(QWidget):
         tx = x + (w - total_w) / 2
         ty = y + (h - fm.height()) / 2
 
-        p.setPen(QColor("#FFFFFF"))
+        p.setPen(self._attr_color(attr_key, value))
         p.drawText(QPointF(tx, ty + fm.ascent()), num_str)
 
-        self._draw_metric_icon(
-            p,
-            QRectF(tx + tw + gap, y + (h - icon_h_) / 2, icon_w_, icon_h_),
-            attr_key,
-            value,
-        )
-
-    def _draw_metric_icon(self, p: QPainter, rect: QRectF, metric: str, value: float):
-        if metric == "temperature":
-            self._draw_thermometer(p, rect, value)
-        elif metric == "humidity":
-            self._draw_droplet(p, rect, value)
-        elif metric == "wind_speed":
-            self._draw_wind_lines(p, rect)
-        else:
-            self._draw_circle_gauge(p, rect)
-
-    def _draw_thermometer(self, p: QPainter, rect: QRectF, temp_c: float):
-        cx      = rect.center().x()
-        tube_w  = rect.width() * 0.30
-        bulb_r  = rect.width() * 0.44
-        tube_bot = rect.bottom() - bulb_r * 1.25
-        tube_top = rect.top()
-
-        cold = QColor("#3860FF")
-        hot  = QColor("#FF3010")
-        frac = max(0.0, min(1.0, (temp_c + 10) / 50))
-        fill = _lerp_color(cold, hot, frac)
-
-        p.setPen(Qt.PenStyle.NoPen)
-        # tube background
-        tube_rect = QRectF(cx - tube_w/2, tube_top, tube_w, tube_bot - tube_top)
-        p.setBrush(QColor(55, 55, 55))
-        p.drawRoundedRect(tube_rect, tube_w/2, tube_w/2)
-        # tube fill
-        fill_h = (tube_bot - tube_top) * frac
-        if fill_h > 0:
-            p.setBrush(fill)
-            p.drawRoundedRect(
-                QRectF(cx - tube_w/2, tube_bot - fill_h, tube_w, fill_h + tube_w/2),
-                tube_w/2, tube_w/2,
+        pix = self._load_attr_pixmap(icon_file, icon_w_, icon_h_)
+        if pix is not None:
+            p.drawPixmap(
+                int(tx + tw + gap + (icon_w_ - pix.width())  / 2),
+                int(y + (h - pix.height()) / 2),
+                pix,
             )
-        # bulb shadow
-        bulb_cy = tube_bot + bulb_r * 0.52
-        p.setBrush(QColor(55, 55, 55))
-        p.drawEllipse(QPointF(cx, bulb_cy), bulb_r, bulb_r)
-        # bulb fill
-        p.setBrush(fill)
-        p.drawEllipse(QPointF(cx, bulb_cy), bulb_r * 0.80, bulb_r * 0.80)
-
-    def _draw_droplet(self, p: QPainter, rect: QRectF, humidity_pct: float):
-        cx  = rect.center().x()
-        top = rect.top()
-        r   = rect.width() * 0.42
-        bot = rect.bottom()
-
-        path = QPainterPath()
-        path.moveTo(cx, top)
-        path.cubicTo(cx + r * 1.1, top + (bot - top) * 0.55,
-                     cx + r,       bot,
-                     cx,           bot)
-        path.cubicTo(cx - r,       bot,
-                     cx - r * 1.1, top + (bot - top) * 0.55,
-                     cx,           top)
-
-        frac  = max(0.0, min(1.0, humidity_pct / 100))
-        alpha = 80 + int(frac * 175)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(40, 110, 230, alpha))
-        p.drawPath(path)
-
-    def _draw_wind_lines(self, p: QPainter, rect: QRectF):
-        pen = QPen(QColor(160, 160, 210), 2.2,
-                   Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
-        p.setPen(pen)
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        h_step = rect.height() / 3
-        lengths = [1.0, 0.72, 0.50]
-        for i, frac in enumerate(lengths):
-            cy  = rect.top() + (i + 0.5) * h_step
-            lw  = rect.width() * frac
-            lx0 = rect.left()
-            lx1 = lx0 + lw
-            ctrl_y = cy - h_step * 0.18
-            path = QPainterPath()
-            path.moveTo(lx0, cy)
-            path.quadTo((lx0 + lx1) / 2, ctrl_y, lx1, cy)
-            p.drawPath(path)
-
-    def _draw_circle_gauge(self, p: QPainter, rect: QRectF):
-        p.setPen(QPen(QColor(90, 90, 90), 2.0))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawEllipse(rect.adjusted(4, 4, -4, -4))
 
     # ── forecast strip ────────────────────────────────────────────────────────
 
