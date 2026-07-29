@@ -137,9 +137,16 @@ class HomeWidget(QWidget):
         threading.Thread(target=self._poll_weather_worker, daemon=True).start()
 
     def _poll_weather_worker(self):
+        import os, datetime
         state    = self._ha.get_weather_state(config.WEATHER_ENTITY)
         forecast = self._ha.get_weather_forecast(config.WEATHER_ENTITY)
-        print(f"[weather] entity={config.WEATHER_ENTITY!r} state={state}", flush=True)
+        log_dir  = os.path.expanduser("~/.local/share/home-app")
+        os.makedirs(log_dir, exist_ok=True)
+        with open(os.path.join(log_dir, "weather_debug.log"), "a") as f:
+            f.write(f"{datetime.datetime.now().isoformat()} "
+                    f"condition={state.get('state') if state else None} "
+                    f"forecast_slots={len(forecast) if forecast else 0} "
+                    f"forecast_sample={forecast[0] if forecast else None}\n")
         if state is not None:
             self._weather_polled.emit({
                 "condition": state.get("state", ""),
