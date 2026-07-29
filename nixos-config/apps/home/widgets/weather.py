@@ -224,28 +224,35 @@ class WeatherWidget(QWidget):
 
         value   = float(raw)
         num_str = f"{int(round(value))}{unit}"
-        icon_w_ = 50
-        icon_h_ = 78
-        gap     = 14
 
+        # Icon: fixed size, fixed position anchored to right edge
+        icon_w_ = 90
+        icon_h_ = 120
+        pad_r   = 18
+        gap     = 20
+
+        icon_x = x + w - icon_w_ - pad_r
+        icon_y = y + (h - icon_h_) / 2
+
+        # Number: right edge fixed just left of the icon, vertically centred
         font = QFont("Sans Serif", 1, QFont.Weight.Bold)
-        font.setPixelSize(58)
+        font.setPointSize(64)
         p.setFont(font)
-        fm = QFontMetricsF(font)
-        tw = fm.horizontalAdvance(num_str)
+        fm  = QFontMetricsF(font)
+        tw  = fm.horizontalAdvance(num_str)
+        num_right = icon_x - gap
+        num_x     = num_right - tw
+        num_y     = y + (h - fm.height()) / 2
 
-        total_w = tw + gap + icon_w_
-        tx = x + (w - total_w) / 2
-        ty = y + (h - fm.height()) / 2
+        p.setPen(QColor("#2f2f2f"))
+        p.drawText(QPointF(num_x, num_y + fm.ascent()), num_str)
 
-        p.setPen(self._attr_color(attr_key, value))
-        p.drawText(QPointF(tx, ty + fm.ascent()), num_str)
-
+        # Attribute icon at original 90×120
         pix = self._load_attr_pixmap(icon_file, icon_w_, icon_h_)
         if pix is not None:
             p.drawPixmap(
-                int(tx + tw + gap + (icon_w_ - pix.width())  / 2),
-                int(y + (h - pix.height()) / 2),
+                int(icon_x + (icon_w_ - pix.width())  / 2),
+                int(icon_y + (icon_h_ - pix.height()) / 2),
                 pix,
             )
 
