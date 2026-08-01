@@ -50,13 +50,12 @@ _CONDITION_FALLBACK = {
     "sunny": "☀",       "windy": "~", "windy-variant": "~",
 }
 
-# (attr key, unit suffix, asset filename)
-# No unit suffix — numbers stand alone per design
+# (attr key, unit suffix, asset filename, display duration ms)
 _METRICS = [
-    ("temperature", "",  "Attribute=Temperature.png"),
-    ("humidity",    "",  "Attribute=Humidity.png"),
-    ("wind_speed",  "",  "Attribute=WindSpeed.png"),
-    ("pressure",    "",  "Attribute=Pressure.png"),
+    ("temperature", "",  "Attribute=Temperature.png",  20_000),
+    ("humidity",    "",  "Attribute=Humidity.png",     10_000),
+    ("wind_speed",  "",  "Attribute=WindSpeed.png",    10_000),
+    ("pressure",    "",  "Attribute=Pressure.png",     10_000),
 ]
 
 _FADE_W = 45
@@ -73,11 +72,10 @@ def _lerp_color(a: QColor, b: QColor, t: float) -> QColor:
 class WeatherWidget(QWidget):
     """Condition icon + cycling attribute display + scrollable hourly forecast."""
 
-    _ICON_W   = 216
-    _STRIP_H  = 90
-    _STRIP_W  = 250
-    _SLOT_W   = 42    # fixed px width per slot — enables independent scrolling
-    _CYCLE_MS = 8_000
+    _ICON_W  = 216
+    _STRIP_H = 90
+    _STRIP_W = 250
+    _SLOT_W  = 42    # fixed px width per slot — enables independent scrolling
 
     def __init__(self, assets: Path, parent=None):
         super().__init__(parent)
@@ -94,7 +92,7 @@ class WeatherWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self._cycle_timer = QTimer(self)
-        self._cycle_timer.setInterval(self._CYCLE_MS)
+        self._cycle_timer.setInterval(_METRICS[0][3])
         self._cycle_timer.timeout.connect(self._advance_metric)
         self._cycle_timer.start()
 
@@ -147,7 +145,6 @@ class WeatherWidget(QWidget):
                 self._drag_scroll_start = self._scroll_x
             else:
                 self._advance_metric()
-                self._cycle_timer.start()
 
     def mouseMoveEvent(self, ev):
         if self._drag_start_x is not None:
@@ -162,6 +159,8 @@ class WeatherWidget(QWidget):
 
     def _advance_metric(self):
         self._metric_idx = (self._metric_idx + 1) % len(_METRICS)
+        self._cycle_timer.setInterval(_METRICS[self._metric_idx][3])
+        self._cycle_timer.start()
         self.update()
 
     # ── pixmap helpers ────────────────────────────────────────────────────────
@@ -263,7 +262,7 @@ class WeatherWidget(QWidget):
         return self._pix_cache[key]
 
     def _draw_attribute(self, p: QPainter, x, y, w, h):
-        attr_key, unit, icon_file = _METRICS[self._metric_idx]
+        attr_key, unit, icon_file, _ = _METRICS[self._metric_idx]
         raw = self._attrs.get(attr_key)
         if raw is None:
             return
