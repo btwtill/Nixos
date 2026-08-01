@@ -168,11 +168,10 @@ startup_layout = [
 ]
 
 # Named apps get a fixed group regardless of spawn order.
-# Key = WM_CLASS instance name (first element, lowercased).
-# Check with: xprop WM_CLASS on the running window.
+# Key = window title (client.name), set via setWindowTitle() in each Qt app.
 _NAMED_GROUPS = {
-    "home-app":  "1",
-    "music-app": "4",
+    "Home":  "1",
+    "Music": "4",
 }
 
 # Unnamed windows (terminals) fill remaining groups in order.
@@ -180,9 +179,8 @@ _startup_queue = deque(["2", "3", "5"])
 
 @hook.subscribe.client_new
 def assign_startup_group(client):
-    wm_class = (client.window.get_wm_class() or ("", ""))[0].lower()
-    if wm_class in _NAMED_GROUPS:
-        client.togroup(_NAMED_GROUPS[wm_class])
+    if client.name in _NAMED_GROUPS:
+        client.togroup(_NAMED_GROUPS[client.name])
     elif _startup_queue:
         client.togroup(_startup_queue.popleft())
 
