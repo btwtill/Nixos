@@ -111,6 +111,7 @@
     neovim
     (pkgs.callPackage ../../apps/music {})
     (pkgs.callPackage ../../apps/home {})
+    (pkgs.callPackage ../../apps/lights {})
     (pkgs.callPackage ../../apps/screenshot {})
   ];
 

@@ -161,7 +161,7 @@ class SvgButton(base._Widget):
 # ----------------------
 startup_layout = [
     ("1", "home-app"),    # group 1 — home control UI
-    ("2", terminal),      # group 2
+    ("2", "lights-app"),  # group 2 — lights control UI
     ("3", terminal),      # group 3
     ("4", "music-app"),   # group 4 — music player
     ("5", terminal)       # group 5 - terminal
@@ -170,12 +170,13 @@ startup_layout = [
 # Named apps get a fixed group regardless of spawn order.
 # Key = window title (client.name), set via setWindowTitle() in each Qt app.
 _NAMED_GROUPS = {
-    "Home":  "1",
-    "Music": "4",
+    "Home":   "1",
+    "Lights": "2",
+    "Music":  "4",
 }
 
 # Unnamed windows (terminals) fill remaining groups in order.
-_startup_queue = deque(["2", "3", "5"])
+_startup_queue = deque(["3", "5"])
 
 @hook.subscribe.client_new
 def assign_startup_group(client):
