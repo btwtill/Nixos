@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 from PyQt6.QtCore import Qt, QRectF, QPointF
 from PyQt6.QtGui import (
     QPainter, QColor, QFont,
@@ -6,20 +7,22 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget
 
-W, H     = 814, 490
-PAGER_H  = 40
+W, H      = 814, 490
+PAGER_H   = 40
 CONTENT_H = H - PAGER_H   # 450
+
+ASSETS_DIR = Path(__file__).parent / "assets"
 
 # ── Page 1 layout constants ────────────────────────────────────────────────────
 FLOORPLAN_W = 750
-FLOORPLAN_H = 352
-FLOORPLAN_X = (W - FLOORPLAN_W) // 2     # 32
+FLOORPLAN_H = 353   # actual image height
+FLOORPLAN_X = (W - FLOORPLAN_W) // 2       # 32
 FLOORPLAN_Y = 8
 
 PRESETS_W = 689
 PRESETS_H = 73
-PRESETS_X = (W - PRESETS_W) // 2         # 62
-PRESETS_Y = FLOORPLAN_Y + FLOORPLAN_H + 5  # 365
+PRESETS_X = (W - PRESETS_W) // 2           # 62
+PRESETS_Y = FLOORPLAN_Y + FLOORPLAN_H + 5  # 366
 
 # ── Page 2 scene definitions: (name, [rgb, rgb, rgb]) ─────────────────────────
 _SCENES = [
@@ -32,14 +35,14 @@ _SCENES = [
 ]
 
 # ── Page 2 button grid ─────────────────────────────────────────────────────────
-_BM  = 16   # margin
-_GX  = 12   # horizontal gap
-_GY  = 12   # vertical gap
+_BM   = 16    # margin
+_GX   = 12    # horizontal gap
+_GY   = 12    # vertical gap
 _COLS = 2
 _ROWS = 3
-_BW  = (W - _BM * 2 - _GX * (_COLS - 1)) // _COLS          # 385
-_BH  = (CONTENT_H - _BM * 2 - _GY * (_ROWS - 1)) // _ROWS  # 131
-_BR  = 22.0  # corner radius
+_BW   = (W - _BM * 2 - _GX * (_COLS - 1)) // _COLS          # 385
+_BH   = (CONTENT_H - _BM * 2 - _GY * (_ROWS - 1)) // _ROWS  # 131
+_BR   = 22.0  # corner radius
 
 
 def _scene_button_pixmap(w: int, h: int, name: str, colors: list) -> QPixmap:
@@ -50,8 +53,8 @@ def _scene_button_pixmap(w: int, h: int, name: str, colors: list) -> QPixmap:
     p = QPainter(pix)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    rect  = QRectF(0.75, 0.75, w - 1.5, h - 1.5)
-    path  = QPainterPath()
+    rect = QRectF(0.75, 0.75, w - 1.5, h - 1.5)
+    path = QPainterPath()
     path.addRoundedRect(rect, _BR, _BR)
 
     # Dark base
@@ -59,8 +62,8 @@ def _scene_button_pixmap(w: int, h: int, name: str, colors: list) -> QPixmap:
     p.fillPath(path, QColor(10, 10, 16))
 
     # Radial gradient blobs — Screen mode = additive light mixing
-    positions  = [(0.35, 0.40), (0.72, 0.30), (0.50, 0.73)]
-    blob_r     = min(w, h) * 0.68
+    positions = [(0.35, 0.40), (0.72, 0.30), (0.50, 0.73)]
+    blob_r    = min(w, h) * 0.68
 
     for (fx, fy), rgb in zip(positions, colors):
         cx   = w * fx
@@ -99,11 +102,12 @@ class LightsWidget(QWidget):
 
         self._page           = 0
         self._drag_start_x: float | None = None
-        self._scene_pixmaps: list[QPixmap] = []
-        self._build_scene_pixmaps()
 
-    def _build_scene_pixmaps(self):
-        self._scene_pixmaps = [
+        self._floorplan_pix  = QPixmap(str(ASSETS_DIR / "floorplan.png"))
+        self._pager_active   = QPixmap(str(ASSETS_DIR / "PagerPerlActive.png"))
+        self._pager_inactive = QPixmap(str(ASSETS_DIR / "PagerPerlInactive.png"))
+
+        self._scene_pixmaps: list[QPixmap] = [
             _scene_button_pixmap(_BW, _BH, name, colors)
             for name, colors in _SCENES
         ]
@@ -118,7 +122,8 @@ class LightsWidget(QWidget):
         if ev.button() == Qt.MouseButton.LeftButton and self._drag_start_x is not None:
             delta = ev.position().x() - self._drag_start_x
             if abs(delta) > 60:
-                new = self._page + (-1 if delta < 0 else 1)
+                # Swipe left (delta < 0) → next page; swipe right → previous
+                new = self._page + (1 if delta < 0 else -1)
                 if 0 <= new <= 1:
                     self._page = new
                     self.update()
@@ -144,31 +149,33 @@ class LightsWidget(QWidget):
         p.end()
 
     def _draw_page1(self, p: QPainter):
-        font_label = QFont("Inter", 12)
-
-        # Floorplan placeholder
-        fp = QRectF(FLOORPLAN_X, FLOORPLAN_Y, FLOORPLAN_W, FLOORPLAN_H)
-        p.fillRect(fp, QColor(55, 80, 130, 160))
-        p.setPen(QColor(160, 190, 255, 200))
-        p.setFont(font_label)
-        p.drawText(fp, Qt.AlignmentFlag.AlignCenter, f"Floorplan  {FLOORPLAN_W}×{FLOORPLAN_H}")
+        # Floorplan image
+        if not self._floorplan_pix.isNull():
+            p.drawPixmap(FLOORPLAN_X, FLOORPLAN_Y, self._floorplan_pix)
+        else:
+            fp = QRectF(FLOORPLAN_X, FLOORPLAN_Y, FLOORPLAN_W, FLOORPLAN_H)
+            p.fillRect(fp, QColor(55, 80, 130, 160))
+            p.setPen(QColor(160, 190, 255, 200))
+            p.setFont(QFont("Inter", 12))
+            p.drawText(fp, Qt.AlignmentFlag.AlignCenter, "floorplan.png not found")
 
         # Presets row placeholder
         pr = QRectF(PRESETS_X, PRESETS_Y, PRESETS_W, PRESETS_H)
         p.fillRect(pr, QColor(70, 130, 80, 160))
         p.setPen(QColor(170, 255, 180, 200))
+        p.setFont(QFont("Inter", 12))
         p.drawText(pr, Qt.AlignmentFlag.AlignCenter, f"Presets row  {PRESETS_W}×{PRESETS_H}")
 
         # Remaining gap
         gap_y = PRESETS_Y + PRESETS_H
         gap_h = CONTENT_H - gap_y
         if gap_h > 0:
-            gap_r = QRectF(0, gap_y, W, gap_h)
-            p.fillRect(gap_r, QColor(80, 80, 80, 50))
+            p.fillRect(QRectF(0, gap_y, W, gap_h), QColor(80, 80, 80, 50))
             p.setPen(QColor(140, 140, 140, 100))
-            font_sm = QFont("Inter", 10)
-            p.setFont(font_sm)
-            p.drawText(gap_r, Qt.AlignmentFlag.AlignCenter, f"remaining  {W}×{int(gap_h)}")
+            p.setFont(QFont("Inter", 10))
+            p.drawText(QRectF(0, gap_y, W, gap_h),
+                       Qt.AlignmentFlag.AlignCenter,
+                       f"remaining  {W}×{int(gap_h)}")
 
     def _draw_page2(self, p: QPainter):
         for idx, pix in enumerate(self._scene_pixmaps):
@@ -179,18 +186,27 @@ class LightsWidget(QWidget):
             p.drawPixmap(bx, by, pix)
 
     def _draw_pager(self, p: QPainter):
-        dot_r   = 4.0
-        dot_gap = 14.0
         n       = 2
-        total_w = n * dot_r * 2 + (n - 1) * dot_gap
-        sx      = (W - total_w) / 2
-        cy      = CONTENT_H + PAGER_H / 2
+        gap     = 12
+        pw_a    = self._pager_active.width()   if not self._pager_active.isNull()   else 34
+        pw_i    = self._pager_inactive.width() if not self._pager_inactive.isNull() else 34
+        ph_a    = self._pager_active.height()  if not self._pager_active.isNull()   else 17
+        ph_i    = self._pager_inactive.height()if not self._pager_inactive.isNull() else 16
+        total_w = pw_a + gap + pw_i
+        sx      = (W - total_w) // 2
+        cy      = CONTENT_H + PAGER_H // 2
 
-        p.setPen(Qt.PenStyle.NoPen)
         for i in range(n):
-            cx = sx + i * (dot_r * 2 + dot_gap) + dot_r
-            p.setBrush(QColor(255, 255, 255, 220 if i == self._page else 70))
-            p.drawEllipse(QPointF(cx, cy), dot_r, dot_r)
+            if i == self._page:
+                pix = self._pager_active
+                pw, ph = pw_a, ph_a
+            else:
+                pix = self._pager_inactive
+                pw, ph = pw_i, ph_i
+            x = sx + i * (pw_i + gap)
+            y = cy - ph // 2
+            if not pix.isNull():
+                p.drawPixmap(x, y, pix)
 
 
 class LightsApp(QMainWindow):

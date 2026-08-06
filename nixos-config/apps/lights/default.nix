@@ -16,6 +16,7 @@ pkgs.stdenv.mkDerivation {
     mkdir -p $out/bin $out/lib/lights-app
 
     cp *.py $out/lib/lights-app/
+    cp -r assets $out/lib/lights-app/
 
     cat > $out/bin/lights-app <<EOF
     #!/bin/sh
