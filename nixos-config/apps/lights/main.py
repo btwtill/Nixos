@@ -34,61 +34,86 @@ _SCENES = [
     ("Morning",       [(255, 215,  90), (255, 170,  70), (235, 235, 190)]),
 ]
 
-# ── Page 2 button grid ─────────────────────────────────────────────────────────
-_BM   = 16    # margin
-_GX   = 12    # horizontal gap
-_GY   = 12    # vertical gap
-_COLS = 2
-_ROWS = 3
-_BW   = (W - _BM * 2 - _GX * (_COLS - 1)) // _COLS          # 385
-_BH   = (CONTENT_H - _BM * 2 - _GY * (_ROWS - 1)) // _ROWS  # 131
-_BR   = 22.0  # corner radius
+# ── Page 2 button grid — 3 columns × 2 rows of square buttons ─────────────────
+_COLS = 3
+_ROWS = 2
+_GX   = 12
+_GY   = 12
+_SQ   = min(
+    (W         - _GX * (_COLS - 1)) // _COLS,   # width-limited
+    (CONTENT_H - _GY * (_ROWS - 1)) // _ROWS,   # height-limited
+)  # 203
+_BM_X = (W         - _COLS * _SQ - _GX * (_COLS - 1)) // 2  # horizontal centering
+_BM_Y = (CONTENT_H - _ROWS * _SQ - _GY * (_ROWS - 1)) // 2  # vertical centering
+_BR   = 24.0  # corner radius
 
 
-def _scene_button_pixmap(w: int, h: int, name: str, colors: list) -> QPixmap:
-    """Render one scene button into an off-screen pixmap."""
+def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
+    """Render one square scene button into an off-screen pixmap."""
+    w = h = size
     pix = QPixmap(w, h)
     pix.fill(Qt.GlobalColor.transparent)
 
     p = QPainter(pix)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    rect = QRectF(0.75, 0.75, w - 1.5, h - 1.5)
+    full_rect = QRectF(0, 0, w, h)
     path = QPainterPath()
-    path.addRoundedRect(rect, _BR, _BR)
+    path.addRoundedRect(full_rect, _BR, _BR)
 
     # Dark base
     p.setClipPath(path)
     p.fillPath(path, QColor(10, 10, 16))
 
-    # Radial gradient blobs — Screen mode = additive light mixing
-    positions = [(0.35, 0.40), (0.72, 0.30), (0.50, 0.73)]
-    blob_r    = min(w, h) * 0.68
+    # ── Blob positions for a square (triangular arrangement) ──────────────────
+    primary_pos = [(0.28, 0.28), (0.72, 0.28), (0.50, 0.75)]
 
-    for (fx, fy), rgb in zip(positions, colors):
-        cx   = w * fx
-        cy   = h * fy
-        grad = QRadialGradient(cx, cy, blob_r)
-        c    = QColor(*rgb)
-        grad.setColorAt(0.0, c)
-        grad.setColorAt(1.0, QColor(0, 0, 0, 0))
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Screen)
-        p.fillRect(QRectF(0, 0, w, h), grad)
+    # Primary blobs — large radius so they bleed into each other
+    big_r = w * 0.82
+    p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Screen)
+    for (fx, fy), rgb in zip(primary_pos, colors):
+        grad = QRadialGradient(w * fx, h * fy, big_r)
+        c = QColor(*rgb)
+        grad.setColorAt(0.00, c)
+        grad.setColorAt(0.45, QColor(c.red(), c.green(), c.blue(), 180))
+        grad.setColorAt(0.75, QColor(c.red(), c.green(), c.blue(),  50))
+        grad.setColorAt(1.00, QColor(0, 0, 0, 0))
+        p.fillRect(full_rect, grad)
 
-    # Glassy border
+    # Secondary blobs at the midpoints — averaged hue, smaller, fill the gaps
+    mid_r = w * 0.48
+    for (p0, p1), (c0, c1) in zip(
+        [(primary_pos[0], primary_pos[1]),
+         (primary_pos[1], primary_pos[2]),
+         (primary_pos[0], primary_pos[2])],
+        [(colors[0], colors[1]),
+         (colors[1], colors[2]),
+         (colors[0], colors[2])],
+    ):
+        mx, my = (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2
+        avg = ((c0[0] + c1[0]) // 2, (c0[1] + c1[1]) // 2, (c0[2] + c1[2]) // 2)
+        grad = QRadialGradient(w * mx, h * my, mid_r)
+        c = QColor(*avg)
+        grad.setColorAt(0.00, QColor(c.red(), c.green(), c.blue(), 210))
+        grad.setColorAt(0.60, QColor(c.red(), c.green(), c.blue(),  80))
+        grad.setColorAt(1.00, QColor(0, 0, 0, 0))
+        p.fillRect(full_rect, grad)
+
+    # ── Inner rim glow — stroke drawn while still clipped so only inside shows ─
     p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-    p.setClipping(False)
-    pen = QPen(QColor(255, 255, 255, 45))
-    pen.setWidthF(1.5)
-    p.setPen(pen)
+    rim_pen = QPen(QColor(255, 255, 255, 65))
+    rim_pen.setWidthF(10.0)   # 5 px visible inside after clip
+    p.setPen(rim_pen)
     p.setBrush(Qt.BrushStyle.NoBrush)
     p.drawPath(path)
 
-    # Label
+    # Label — no border, no outer stroke
+    p.setClipping(False)
+    p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
     font = QFont("Inter", 13, QFont.Weight.Medium)
     p.setFont(font)
     p.setPen(QColor(255, 255, 255, 225))
-    p.drawText(QRectF(0, 0, w, h), Qt.AlignmentFlag.AlignCenter, name)
+    p.drawText(full_rect, Qt.AlignmentFlag.AlignCenter, name)
 
     p.end()
     return pix
@@ -108,7 +133,7 @@ class LightsWidget(QWidget):
         self._pager_inactive = QPixmap(str(ASSETS_DIR / "PagerPerlInactive.png"))
 
         self._scene_pixmaps: list[QPixmap] = [
-            _scene_button_pixmap(_BW, _BH, name, colors)
+            _scene_button_pixmap(_SQ, name, colors)
             for name, colors in _SCENES
         ]
 
@@ -181,8 +206,8 @@ class LightsWidget(QWidget):
         for idx, pix in enumerate(self._scene_pixmaps):
             col = idx % _COLS
             row = idx // _COLS
-            bx  = _BM + col * (_BW + _GX)
-            by  = _BM + row * (_BH + _GY)
+            bx  = _BM_X + col * (_SQ + _GX)
+            by  = _BM_Y + row * (_SQ + _GY)
             p.drawPixmap(bx, by, pix)
 
     def _draw_pager(self, p: QPainter):
