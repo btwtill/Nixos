@@ -68,19 +68,19 @@ def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
     # ── Blob positions for a square (triangular arrangement) ──────────────────
     primary_pos = [(0.28, 0.28), (0.72, 0.28), (0.50, 0.75)]
 
-    # Primary blobs — large radius so they bleed into each other
+    # Primary blobs — large radius, reduced alpha for moderate brightness
     big_r = w * 0.82
     p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Screen)
     for (fx, fy), rgb in zip(primary_pos, colors):
         grad = QRadialGradient(w * fx, h * fy, big_r)
         c = QColor(*rgb)
-        grad.setColorAt(0.00, c)
-        grad.setColorAt(0.45, QColor(c.red(), c.green(), c.blue(), 180))
-        grad.setColorAt(0.75, QColor(c.red(), c.green(), c.blue(),  50))
+        grad.setColorAt(0.00, QColor(c.red(), c.green(), c.blue(), 140))
+        grad.setColorAt(0.45, QColor(c.red(), c.green(), c.blue(),  90))
+        grad.setColorAt(0.75, QColor(c.red(), c.green(), c.blue(),  25))
         grad.setColorAt(1.00, QColor(0, 0, 0, 0))
         p.fillRect(full_rect, grad)
 
-    # Secondary blobs at the midpoints — averaged hue, smaller, fill the gaps
+    # Secondary midpoint blobs — averaged hue, dimmer
     mid_r = w * 0.48
     for (p0, p1), (c0, c1) in zip(
         [(primary_pos[0], primary_pos[1]),
@@ -94,25 +94,28 @@ def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
         avg = ((c0[0] + c1[0]) // 2, (c0[1] + c1[1]) // 2, (c0[2] + c1[2]) // 2)
         grad = QRadialGradient(w * mx, h * my, mid_r)
         c = QColor(*avg)
-        grad.setColorAt(0.00, QColor(c.red(), c.green(), c.blue(), 210))
-        grad.setColorAt(0.60, QColor(c.red(), c.green(), c.blue(),  80))
+        grad.setColorAt(0.00, QColor(c.red(), c.green(), c.blue(), 120))
+        grad.setColorAt(0.60, QColor(c.red(), c.green(), c.blue(),  40))
         grad.setColorAt(1.00, QColor(0, 0, 0, 0))
         p.fillRect(full_rect, grad)
 
-    # ── Inner rim glow — stroke drawn while still clipped so only inside shows ─
+    # ── Inner rim glow — stacked strokes of decreasing width, same low alpha.
+    # Each pixel near the edge is hit by more strokes than pixels further in,
+    # producing a gradient that fades from the rim toward the center.
     p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-    rim_pen = QPen(QColor(255, 255, 255, 65))
-    rim_pen.setWidthF(10.0)   # 5 px visible inside after clip
-    p.setPen(rim_pen)
     p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawPath(path)
+    for stroke_w in (18, 13, 9, 5, 2):
+        pen = QPen(QColor(255, 255, 255, 20))
+        pen.setWidthF(float(stroke_w))
+        p.setPen(pen)
+        p.drawPath(path)   # clip keeps only the inner half of each stroke
 
-    # Label — no border, no outer stroke
+    # Label
     p.setClipping(False)
     p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
     font = QFont("Inter", 13, QFont.Weight.Medium)
     p.setFont(font)
-    p.setPen(QColor(255, 255, 255, 225))
+    p.setPen(QColor(0x2f, 0x2f, 0x2f))
     p.drawText(full_rect, Qt.AlignmentFlag.AlignCenter, name)
 
     p.end()
