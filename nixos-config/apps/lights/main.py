@@ -14,7 +14,7 @@ CONTENT_H = H - PAGER_H   # 450
 
 ASSETS_DIR = Path(__file__).parent / "assets"
 
-# ── Page 1 layout constants ────────────────────────────────────────────────────
+# ── Page 1 layout ──────────────────────────────────────────────────────────────
 FLOORPLAN_W = 750
 FLOORPLAN_H = 353
 FLOORPLAN_X = (W - FLOORPLAN_W) // 2
@@ -25,29 +25,28 @@ PRESETS_H = 73
 PRESETS_X = (W - PRESETS_W) // 2
 PRESETS_Y = FLOORPLAN_Y + FLOORPLAN_H + 5  # 366
 
-# ── Preset row buttons ─────────────────────────────────────────────────────────
-_BTN_PAD = 8              # vertical padding inside row (also used as left/right edge inset)
-_BTN_GAP = 10             # gap between buttons
-_BTN_H   = PRESETS_H - _BTN_PAD * 2   # 57 px display height
+_LIGHT_SZ = 40   # display size of each light icon on the floorplan (px)
 
-# (normal_asset, highlighted_asset_or_None, mode)
-# mode: "normal"    — plain button, no persistent highlight
-#       "momentary" — highlight on press, revert on release
-#       "toggle"    — highlight stays until clicked again
+# ── Preset row buttons ─────────────────────────────────────────────────────────
+_BTN_PAD = 8
+_BTN_GAP = 10
+_BTN_H   = PRESETS_H - _BTN_PAD * 2   # 57
+
+# (normal_asset, hi_asset_or_None, mode)
+# mode: "normal" | "momentary" | "toggle"
 _LEFT_DEFS = [
-    ("SelectAllLights_Button.png",    None,                                      "normal"),
-    ("AddNewLightsScene_Button.png",  "AddNewLightsScene_Button_Highlighted.png","momentary"),
-    ("LightSettings_Button.png",      "LightSettings_Button_Highlighted.png",    "toggle"),
-    ("AddLight_Button.png",           None,                                      "normal"),
+    ("SelectAllLights_Button.png",   None,                                      "normal"),
+    ("AddNewLightsScene_Button.png", "AddNewLightsScene_Button_Highlighted.png","momentary"),
+    ("LightSettings_Button.png",     "LightSettings_Button_Highlighted.png",    "toggle"),
+    ("AddLight_Button.png",          None,                                      "normal"),
 ]
 _RIGHT_DEFS = [
-    ("QuickPreset.png",  None, "normal"),
-    ("ColorPicker.png",  None, "normal"),
-    ("Picker.png",       None, "normal"),
+    ("QuickPreset.png", None, "normal"),
+    ("QuickPreset.png", None, "normal"),
+    ("QuickPreset.png", None, "normal"),
 ]
 
-
-# ── Page 2 scene definitions ───────────────────────────────────────────────────
+# ── Page 2 scenes ──────────────────────────────────────────────────────────────
 _SCENES = [
     ("Cozy Evening",  [(255, 130, 50),  (255,  90, 20),  (180,  50, 10)]),
     ("Focus",         [(160, 200, 255), (180, 215, 255), (140, 185, 255)]),
@@ -57,7 +56,7 @@ _SCENES = [
     ("Morning",       [(255, 215,  90), (255, 170,  70), (235, 235, 190)]),
 ]
 
-# ── Page 2 button grid — 3 × 2 squares ────────────────────────────────────────
+# ── Page 2 grid — 3 × 2 squares ───────────────────────────────────────────────
 _COLS = 3
 _ROWS = 2
 _GX   = 12
@@ -65,33 +64,29 @@ _GY   = 12
 _SQ   = min(
     (W         - _GX * (_COLS - 1)) // _COLS,
     (CONTENT_H - _GY * (_ROWS - 1)) // _ROWS,
-)  # 203
+)
 _BM_X = (W         - _COLS * _SQ - _GX * (_COLS - 1)) // 2
 _BM_Y = (CONTENT_H - _ROWS * _SQ - _GY * (_ROWS - 1)) // 2
 _BR   = 24.0
 
 
-# ── Preset button helpers ──────────────────────────────────────────────────────
+# ── Data classes ───────────────────────────────────────────────────────────────
 
-def _load_preset_pix(name: str) -> QPixmap | None:
-    """Load an asset PNG scaled to _BTN_H px tall, preserving aspect ratio."""
-    pix = QPixmap(str(ASSETS_DIR / name))
-    if pix.isNull():
-        return None
-    scaled_w = int(pix.width() * _BTN_H / pix.height())
-    return pix.scaled(scaled_w, _BTN_H,
-                      Qt.AspectRatioMode.KeepAspectRatio,
-                      Qt.TransformationMode.SmoothTransformation)
+class _Light:
+    """A light icon placed on the floorplan."""
+    __slots__ = ("pos", "selected")
+
+    def __init__(self, pos: QPointF):
+        self.pos      = pos     # center, floorplan-relative coords
+        self.selected = False
 
 
 class _PresetBtn:
-    """A single button in the preset row with visual state tracking."""
-
     __slots__ = ("pix_n", "pix_h", "mode", "rect", "pressed", "toggled")
 
     def __init__(self, pix_n, pix_h, mode, rect):
         self.pix_n   = pix_n
-        self.pix_h   = pix_h    # None if no highlight state
+        self.pix_h   = pix_h
         self.mode    = mode
         self.rect    = rect
         self.pressed = False
@@ -101,9 +96,21 @@ class _PresetBtn:
     def current_pix(self) -> QPixmap | None:
         if self.mode == "momentary" and self.pressed and self.pix_h:
             return self.pix_h
-        if self.mode == "toggle" and self.toggled and self.pix_h:
+        if self.mode == "toggle"    and self.toggled and self.pix_h:
             return self.pix_h
         return self.pix_n
+
+
+# ── Module-level helpers ───────────────────────────────────────────────────────
+
+def _load_preset_pix(name: str) -> QPixmap | None:
+    pix = QPixmap(str(ASSETS_DIR / name))
+    if pix.isNull():
+        return None
+    w = int(pix.width() * _BTN_H / pix.height())
+    return pix.scaled(w, _BTN_H,
+                      Qt.AspectRatioMode.KeepAspectRatio,
+                      Qt.TransformationMode.SmoothTransformation)
 
 
 def _build_left_btns() -> list[_PresetBtn]:
@@ -112,29 +119,24 @@ def _build_left_btns() -> list[_PresetBtn]:
     for fname_n, fname_h, mode in _LEFT_DEFS:
         pix_n = _load_preset_pix(fname_n)
         pix_h = _load_preset_pix(fname_h) if fname_h else None
-        btn_w = pix_n.width() if pix_n else _BTN_H  # fallback: square
-        rect  = QRectF(x, PRESETS_Y + _BTN_PAD, btn_w, _BTN_H)
-        btns.append(_PresetBtn(pix_n, pix_h, mode, rect))
-        x += btn_w + _BTN_GAP
+        w     = pix_n.width() if pix_n else _BTN_H
+        btns.append(_PresetBtn(pix_n, pix_h, mode, QRectF(x, PRESETS_Y + _BTN_PAD, w, _BTN_H)))
+        x += w + _BTN_GAP
     return btns
 
 
 def _build_right_btns() -> list[_PresetBtn]:
-    """Build right-group buttons, aligned flush to the right edge of the preset row."""
     btns: list[_PresetBtn] = []
     x = float(PRESETS_X + PRESETS_W - _BTN_PAD)
     for fname_n, fname_h, mode in reversed(_RIGHT_DEFS):
         pix_n = _load_preset_pix(fname_n)
         pix_h = _load_preset_pix(fname_h) if fname_h else None
-        btn_w = pix_n.width() if pix_n else _BTN_H
-        x -= btn_w
-        rect = QRectF(x, PRESETS_Y + _BTN_PAD, btn_w, _BTN_H)
-        btns.insert(0, _PresetBtn(pix_n, pix_h, mode, rect))
-        x -= _BTN_GAP
+        w     = pix_n.width() if pix_n else _BTN_H
+        x    -= w
+        btns.insert(0, _PresetBtn(pix_n, pix_h, mode, QRectF(x, PRESETS_Y + _BTN_PAD, w, _BTN_H)))
+        x    -= _BTN_GAP
     return btns
 
-
-# ── Scene button renderer ──────────────────────────────────────────────────────
 
 def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
     w = h = size
@@ -181,23 +183,19 @@ def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
         grad.setColorAt(1.00, QColor(0, 0, 0, 0))
         p.fillRect(full_rect, grad)
 
-    # Inner rim glow — stacked strokes, larger → smaller; pixels near edge
-    # are covered by more strokes, fading toward center.
     p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
     p.setBrush(Qt.BrushStyle.NoBrush)
-    for stroke_w in (18, 13, 9, 5, 2):
+    for sw in (18, 13, 9, 5, 2):
         pen = QPen(QColor(255, 255, 255, 20))
-        pen.setWidthF(float(stroke_w))
+        pen.setWidthF(float(sw))
         p.setPen(pen)
         p.drawPath(path)
 
     p.setClipping(False)
     p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-    font = QFont("Inter", 13, QFont.Weight.Medium)
-    p.setFont(font)
+    p.setFont(QFont("Inter", 13, QFont.Weight.Medium))
     p.setPen(QColor(0x2f, 0x2f, 0x2f))
     p.drawText(full_rect, Qt.AlignmentFlag.AlignCenter, name)
-
     p.end()
     return pix
 
@@ -210,13 +208,32 @@ class LightsWidget(QWidget):
         self.setFixedSize(W, H)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        self._page           = 0
+        self._page          = 0
         self._drag_start_x: float | None = None
-        self._pressed_btn: _PresetBtn | None = None
+        self._pressed_btn:  _PresetBtn  | None = None
 
+        # Light management
+        self._lights:       list[_Light] = []
+        self._dragging:     int | None   = None   # index into _lights
+        self._drag_offset                = QPointF(0, 0)
+
+        # Assets
         self._floorplan_pix  = QPixmap(str(ASSETS_DIR / "floorplan.png"))
         self._pager_active   = QPixmap(str(ASSETS_DIR / "PagerPerlActive.png"))
         self._pager_inactive = QPixmap(str(ASSETS_DIR / "PagerPerlInactive.png"))
+
+        # Light icon pixmaps — one per (Selected/Default) × (True/False) combo
+        self._light_pix: dict[str, QPixmap] = {}
+        for sel in ("Default", "Selected"):
+            for move in ("True", "False"):
+                key  = f"{sel}_Default_{move}"
+                raw  = QPixmap(str(ASSETS_DIR / f"{key}.png"))
+                if not raw.isNull():
+                    self._light_pix[key] = raw.scaled(
+                        _LIGHT_SZ, _LIGHT_SZ,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
 
         self._left_btns  = _build_left_btns()
         self._right_btns = _build_right_btns()
@@ -226,41 +243,123 @@ class LightsWidget(QWidget):
             for name, colors in _SCENES
         ]
 
-    # ── interaction ───────────────────────────────────────────────────────────
+    # ── Light state helpers ───────────────────────────────────────────────────
+
+    @property
+    def _options_mode(self) -> bool:
+        """True when the LightSettings toggle (left btn index 2) is active."""
+        return self._left_btns[2].toggled
+
+    def _light_pix_key(self, light: _Light) -> str:
+        sel  = "Selected" if light.selected else "Default"
+        move = "True"     if self._options_mode else "False"
+        return f"{sel}_Default_{move}"
+
+    def _light_rect(self, light: _Light) -> QRectF:
+        half = _LIGHT_SZ / 2
+        cx   = FLOORPLAN_X + light.pos.x()
+        cy   = FLOORPLAN_Y + light.pos.y()
+        return QRectF(cx - half, cy - half, _LIGHT_SZ, _LIGHT_SZ)
+
+    def _deselect_all(self):
+        for l in self._lights:
+            l.selected = False
+
+    # ── Button actions ────────────────────────────────────────────────────────
+
+    def _on_btn_release(self, btn: _PresetBtn):
+        """Dispatches side-effects after a button click is confirmed."""
+        if btn is self._left_btns[2]:   # LightSettings toggle
+            self._on_options_toggle()
+        elif btn is self._left_btns[3]: # AddLight
+            self._add_light()
+
+    def _on_options_toggle(self):
+        if not self._options_mode:      # just turned OFF
+            self._dragging = None       # cancel any active drag
+        self.update()
+
+    def _add_light(self):
+        """Place a new light at floorplan centre, select it, ensure options mode is on."""
+        self._deselect_all()
+        light          = _Light(QPointF(FLOORPLAN_W / 2, FLOORPLAN_H / 2))
+        light.selected = True
+        self._lights.append(light)
+        self._left_btns[2].toggled = True   # force LightSettings toggle on
+        self.update()
+
+    # ── Interaction ───────────────────────────────────────────────────────────
 
     def mousePressEvent(self, ev):
         if ev.button() != Qt.MouseButton.LeftButton:
             return
         pos = ev.position()
 
-        # Check preset buttons first (page 1 only)
         if self._page == 0:
+            # 1. Preset buttons take priority
             for btn in self._left_btns + self._right_btns:
                 if btn.rect.contains(pos):
                     self._pressed_btn = btn
                     if btn.mode == "momentary":
                         btn.pressed = True
                         self.update()
-                    return  # consumed — don't start swipe tracking
+                    return
+
+            # 2. Light icons on floorplan
+            fp_rect = QRectF(FLOORPLAN_X, FLOORPLAN_Y, FLOORPLAN_W, FLOORPLAN_H)
+            if fp_rect.contains(pos):
+                for i, light in enumerate(self._lights):
+                    if self._light_rect(light).contains(pos):
+                        self._deselect_all()
+                        light.selected = True
+                        if self._options_mode:
+                            self._dragging    = i
+                            self._drag_offset = QPointF(
+                                pos.x() - (FLOORPLAN_X + light.pos.x()),
+                                pos.y() - (FLOORPLAN_Y + light.pos.y()),
+                            )
+                        self.update()
+                        return
+                # Tap on empty floorplan → deselect all
+                self._deselect_all()
+                self.update()
+                return
 
         self._drag_start_x = pos.x()
+
+    def mouseMoveEvent(self, ev):
+        if self._dragging is not None:
+            pos   = ev.position()
+            light = self._lights[self._dragging]
+            half  = _LIGHT_SZ / 2
+            light.pos = QPointF(
+                max(half, min(pos.x() - FLOORPLAN_X - self._drag_offset.x(), FLOORPLAN_W - half)),
+                max(half, min(pos.y() - FLOORPLAN_Y - self._drag_offset.y(), FLOORPLAN_H - half)),
+            )
+            self.update()
 
     def mouseReleaseEvent(self, ev):
         if ev.button() != Qt.MouseButton.LeftButton:
             return
         pos = ev.position()
 
+        if self._dragging is not None:
+            self._dragging = None
+            return
+
         if self._pressed_btn is not None:
-            btn = self._pressed_btn
+            btn  = self._pressed_btn
             self._pressed_btn = None
+            was_in = btn.rect.contains(pos)
             if btn.mode == "momentary":
                 btn.pressed = False
-            elif btn.mode == "toggle" and btn.rect.contains(pos):
+            elif btn.mode == "toggle" and was_in:
                 btn.toggled = not btn.toggled
+            if was_in:
+                self._on_btn_release(btn)
             self.update()
             return
 
-        # Swipe detection
         if self._drag_start_x is not None:
             delta = pos.x() - self._drag_start_x
             if abs(delta) > 60:
@@ -270,7 +369,7 @@ class LightsWidget(QWidget):
                     self.update()
             self._drag_start_x = None
 
-    # ── paint ─────────────────────────────────────────────────────────────────
+    # ── Paint ─────────────────────────────────────────────────────────────────
 
     def paintEvent(self, _ev):
         p = QPainter(self)
@@ -290,7 +389,7 @@ class LightsWidget(QWidget):
         p.end()
 
     def _draw_page1(self, p: QPainter):
-        # Floorplan image
+        # Floorplan
         if not self._floorplan_pix.isNull():
             p.drawPixmap(FLOORPLAN_X, FLOORPLAN_Y, self._floorplan_pix)
         else:
@@ -300,19 +399,20 @@ class LightsWidget(QWidget):
             p.setFont(QFont("Inter", 12))
             p.drawText(fp, Qt.AlignmentFlag.AlignCenter, "floorplan.png not found")
 
-        # Preset row — left buttons
-        for btn in self._left_btns:
+        # Light icons (drawn on top of floorplan)
+        for light in self._lights:
+            pix = self._light_pix.get(self._light_pix_key(light))
+            if pix:
+                r = self._light_rect(light)
+                p.drawPixmap(int(r.x()), int(r.y()), pix)
+
+        # Preset row buttons
+        for btn in self._left_btns + self._right_btns:
             pix = btn.current_pix
             if pix:
                 p.drawPixmap(int(btn.rect.x()), int(btn.rect.y()), pix)
 
-        # Preset row — right buttons
-        for btn in self._right_btns:
-            pix = btn.current_pix
-            if pix:
-                p.drawPixmap(int(btn.rect.x()), int(btn.rect.y()), pix)
-
-        # Remaining gap
+        # Remaining gap below preset row
         gap_y = PRESETS_Y + PRESETS_H
         gap_h = CONTENT_H - gap_y
         if gap_h > 0:
@@ -322,19 +422,16 @@ class LightsWidget(QWidget):
         for idx, pix in enumerate(self._scene_pixmaps):
             col = idx % _COLS
             row = idx // _COLS
-            bx  = _BM_X + col * (_SQ + _GX)
-            by  = _BM_Y + row * (_SQ + _GY)
-            p.drawPixmap(bx, by, pix)
+            p.drawPixmap(_BM_X + col * (_SQ + _GX), _BM_Y + row * (_SQ + _GY), pix)
 
     def _draw_pager(self, p: QPainter):
         n       = 2
         gap     = 12
-        pw_a    = self._pager_active.width()    if not self._pager_active.isNull()    else 34
-        pw_i    = self._pager_inactive.width()  if not self._pager_inactive.isNull()  else 34
-        ph_a    = self._pager_active.height()   if not self._pager_active.isNull()    else 17
-        ph_i    = self._pager_inactive.height() if not self._pager_inactive.isNull()  else 16
-        total_w = pw_a + gap + pw_i
-        sx      = (W - total_w) // 2
+        pw_a    = self._pager_active.width()    if not self._pager_active.isNull()   else 34
+        pw_i    = self._pager_inactive.width()  if not self._pager_inactive.isNull() else 34
+        ph_a    = self._pager_active.height()   if not self._pager_active.isNull()   else 17
+        ph_i    = self._pager_inactive.height() if not self._pager_inactive.isNull() else 16
+        sx      = (W - pw_a - gap - pw_i) // 2
         cy      = CONTENT_H + PAGER_H // 2
 
         for i in range(n):
@@ -342,10 +439,8 @@ class LightsWidget(QWidget):
                 pix, ph = self._pager_active, ph_a
             else:
                 pix, ph = self._pager_inactive, ph_i
-            x = sx + i * (pw_i + gap)
-            y = cy - ph // 2
             if not pix.isNull():
-                p.drawPixmap(x, y, pix)
+                p.drawPixmap(sx + i * (pw_i + gap), cy - ph // 2, pix)
 
 
 class LightsApp(QMainWindow):
