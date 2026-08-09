@@ -39,12 +39,14 @@ _FP_PAN_MAX = 0      # don't pan past default
 _ANIM_EASE  = 0.18   # easing factor per frame (~60 fps)
 
 # Panel content layout (panel-local coordinates, origin = panel top-left)
-_ARC_CX    = PANEL_W // 2           # 171
-_ARC_CY    = PANEL_H // 4           # 111
-_ARC_R     = 80.0
-_ARC_TW    = 12.0
-_ARC_START = 225.0                  # screen angle at value=0 (lower-left), 0°=top CW+
-_ARC_SPAN  = 270.0                  # clockwise sweep to value=1 (lower-right)
+# Arc parameters match the home-app LIGHT_SLIDER exactly:
+#   start_angle=-25, end_angle=-300, clockwise=False → CCW 275° gap at top
+_ARC_CX       = PANEL_W // 2   # 171
+_ARC_CY       = PANEL_H // 4   # 111
+_ARC_R        = 85.0           # radius
+_ARC_TW       = 10.0           # track width (for hit detection)
+_ARC_QT_START = 335.0          # (-25) % 360 — start in screen-angle space
+_ARC_SPAN     = 275.0          # CCW sweep in degrees
 
 _COLOR_CX  = PANEL_W // 2           # 171
 _COLOR_CY  = (PANEL_H * 3) // 4     # 335
@@ -158,29 +160,6 @@ def _build_right_btns() -> list[_PresetBtn]:
     return btns
 
 
-def _lerp_color(a: QColor, b: QColor, t: float) -> QColor:
-    return QColor(
-        int(a.red()   + t * (b.red()   - a.red())),
-        int(a.green() + t * (b.green() - a.green())),
-        int(a.blue()  + t * (b.blue()  - a.blue())),
-    )
-
-_ARC_FILL_STOPS = [
-    (0.0, QColor(100,  70,  30)),
-    (0.5, QColor(220, 160,  80)),
-    (1.0, QColor(255, 220, 140)),
-]
-
-def _sample_arc_color(t: float) -> QColor:
-    for i in range(len(_ARC_FILL_STOPS) - 1):
-        p0, c0 = _ARC_FILL_STOPS[i]
-        p1, c1 = _ARC_FILL_STOPS[i + 1]
-        if p0 <= t <= p1:
-            f = (t - p0) / (p1 - p0) if p1 > p0 else 0.0
-            return _lerp_color(c0, c1, f)
-    return _ARC_FILL_STOPS[-1][1]
-
-
 def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
     w = h = size
     pix = QPixmap(w, h)
@@ -272,8 +251,10 @@ class LightsWidget(QWidget):
         self._panel_pix      = QPixmap(str(ASSETS_DIR / "LightsSidePanelBackground.png"))
         self._pager_active   = QPixmap(str(ASSETS_DIR / "PagerPerlActive.png"))
         self._pager_inactive = QPixmap(str(ASSETS_DIR / "PagerPerlInactive.png"))
-        self._color_wheel_pix = QPixmap(str(ASSETS_DIR / "ColorPicker.png"))
-        self._picker_pix      = QPixmap(str(ASSETS_DIR / "Picker.png"))
+        self._color_wheel_pix     = QPixmap(str(ASSETS_DIR / "ColorPicker.png"))
+        self._picker_pix          = QPixmap(str(ASSETS_DIR / "Picker.png"))
+        self._slider_backdrop_pix = QPixmap(str(ASSETS_DIR / "sliderbackdrop_dark.png"))
+        self._slider_knob_pix     = QPixmap(str(ASSETS_DIR / "sliderknob_dark.png"))
 
         self._light_pix: dict[str, QPixmap] = {}
         for sel in ("Default", "Selected"):
@@ -417,7 +398,8 @@ class LightsWidget(QWidget):
         dx    = pos.x() - cx
         dy    = pos.y() - cy
         angle = math.degrees(math.atan2(dx, -dy)) % 360
-        rel   = (angle - _ARC_START) % 360
+        # CCW convention — matches ArcSlider._set_from_pos with clockwise=False
+        rel   = (_ARC_QT_START - angle) % 360
         if rel <= _ARC_SPAN:
             return rel / _ARC_SPAN
         return 1.0 if (rel - _ARC_SPAN) < (360 - _ARC_SPAN) / 2 else 0.0
@@ -644,47 +626,44 @@ class LightsWidget(QWidget):
         p.restore()
 
     def _draw_intensity_arc(self, p: QPainter, px: float, value: float):
-        cx   = px + _ARC_CX
-        cy   = float(PANEL_Y + _ARC_CY)
-        r    = _ARC_R
-        rect = QRectF(cx - r, cy - r, r * 2, r * 2)
+        """Exact replica of the home-app LIGHT_SLIDER (start=-25, end=-300, CCW)."""
+        cx = px + _ARC_CX
+        cy = float(PANEL_Y + _ARC_CY)
+        r  = _ARC_R
 
-        # Qt arc system: 0°=3 o'clock, CCW+, 1/16° units
-        # Screen system: 0°=12 o'clock, CW+
-        qt_start = 90.0 - _ARC_START   # = -135
-        qt_dir   = -1                   # CW on screen = decreasing Qt angle
-        qt_span  = qt_dir * _ARC_SPAN  # = -270
+        # Backdrop image (196×190, bg_offset=(0,4)) — same as home app
+        if not self._slider_backdrop_pix.isNull():
+            bw = self._slider_backdrop_pix.width()
+            bh = self._slider_backdrop_pix.height()
+            # scale = min(1, available_w/bw, available_h/bh) — both >1 here so scale=1
+            p.drawPixmap(int(cx - bw / 2), int(cy - bh / 2) + 4,
+                         self._slider_backdrop_pix)
 
-        # Track (full range)
-        p.setPen(QPen(QColor(0x25, 0x25, 0x25, 200), _ARC_TW,
-                      Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawArc(rect, int(qt_start * 16), int(qt_span * 16))
-
-        # Gradient fill (0 → value)
+        rect     = QRectF(cx - r, cy - r, r * 2, r * 2)
+        # qt_start = 90 - screen_start = 90 - (-25) = 115
+        qt_start = 115.0
+        # CCW on screen → positive span in Qt (qt_dir = +1)
         if value > 0.001:
-            n = 60
-            for i in range(n):
-                t0 = i / n
-                if t0 >= value:
-                    break
-                t1  = min((i + 1) / n, value)
-                col = _sample_arc_color((t0 + t1) / 2)
-                is_first = (i == 0)
-                is_last  = (t1 >= value)
-                cap = Qt.PenCapStyle.RoundCap if (is_first or is_last) else Qt.PenCapStyle.FlatCap
-                p.setPen(QPen(col, _ARC_TW, Qt.PenStyle.SolidLine, cap))
-                seg_s = qt_start + qt_dir * t0 * _ARC_SPAN
-                seg_n = qt_dir * (t1 - t0) * _ARC_SPAN
-                p.drawArc(rect, int(seg_s * 16), int(seg_n * 16))
+            p.setPen(QPen(QColor("#C8B09A"), _ARC_TW,
+                          Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawArc(rect,
+                      int(round(qt_start * 16)),
+                      int(round(_ARC_SPAN * value * 16)))  # positive = CCW in Qt
 
-        # Handle knob
-        ha  = _ARC_START + value * _ARC_SPAN
-        hx  = cx + r * math.sin(math.radians(ha))
-        hy  = cy - r * math.cos(math.radians(ha))
-        p.setPen(QPen(QColor(255, 255, 255, 180), 2.0))
-        p.setBrush(_sample_arc_color(value))
-        p.drawEllipse(QPointF(hx, hy), 9.0, 9.0)
+        # Handle knob (40×40) — screen_angle = start - span*value (CCW)
+        screen_angle = -25.0 - _ARC_SPAN * value
+        angle_rad    = math.radians(screen_angle)
+        hx = cx + r * math.sin(angle_rad)
+        hy = cy - r * math.cos(angle_rad)
+        if not self._slider_knob_pix.isNull():
+            hw = self._slider_knob_pix.width()
+            hh = self._slider_knob_pix.height()
+            p.drawPixmap(int(hx - hw / 2), int(hy - hh / 2), self._slider_knob_pix)
+        else:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor("#C8B09A"))
+            p.drawEllipse(QPointF(hx, hy), 9.0, 9.0)
 
         # Center percentage label
         p.setPen(QColor(220, 220, 220))
