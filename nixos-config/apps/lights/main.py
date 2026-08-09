@@ -310,9 +310,8 @@ class LightsWidget(QWidget):
             if fp_rect.contains(pos):
                 for i, light in enumerate(self._lights):
                     if self._light_rect(light).contains(pos):
-                        self._deselect_all()
-                        light.selected = True
-                        if self._options_mode:
+                        light.selected = not light.selected   # toggle; others unchanged
+                        if self._options_mode and light.selected:
                             self._dragging    = i
                             self._drag_offset = QPointF(
                                 pos.x() - (FLOORPLAN_X + light.pos.x()),
