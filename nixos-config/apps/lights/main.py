@@ -620,19 +620,21 @@ class LightsWidget(QWidget):
 
     def paintEvent(self, _ev):
         p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        p.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        try:
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+            p.fillRect(self.rect(), Qt.GlobalColor.transparent)
+            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
-        if self._page == 0:
-            self._draw_page1(p)
-        else:
-            self._draw_page2(p)
+            if self._page == 0:
+                self._draw_page1(p)
+            else:
+                self._draw_page2(p)
 
-        self._draw_pager(p)
-        p.end()
+            self._draw_pager(p)
+        finally:
+            p.end()
 
     def _draw_page1(self, p: QPainter):
         fp_clip = QRectF(FLOORPLAN_X, FLOORPLAN_Y, FLOORPLAN_W, FLOORPLAN_H)
@@ -847,7 +849,7 @@ class LightsWidget(QWidget):
             is_sel = ref.ha_name == name
             lp.setPen(QColor(255, 255, 255) if is_sel else QColor(160, 160, 160))
             lp.setFont(QFont("Inter", 14,
-                             QFont.Weight.SemiBold if is_sel else QFont.Weight.Normal))
+                             QFont.Weight.DemiBold if is_sel else QFont.Weight.Normal))
             lp.drawText(QRectF(ix, iy, _LIST_ITEM_W, _LIST_ITEM_H),
                         Qt.AlignmentFlag.AlignCenter, name)
 
