@@ -52,7 +52,7 @@ _COLOR_CX  = PANEL_W // 2           # 171
 _COLOR_CY  = (PANEL_H * 3) // 4     # 335
 _COLOR_R   = 90.0                   # interactive radius of the color wheel
 _PICKER_SZ = 20                     # picker handle display size (px)
-_COLOR_DOT = 7                      # radius of current-color indicator dot
+_COLOR_DOT = 5                      # radius of current-color indicator dot
 
 # ── Preset row ─────────────────────────────────────────────────────────────────
 _BTN_PAD = 8
@@ -408,9 +408,11 @@ class LightsWidget(QWidget):
         cx  = px + _COLOR_CX
         cy  = float(PANEL_Y + _COLOR_CY)
         dx  = pos.x() - cx
-        dy  = pos.y() - cy
+        dy  = pos.y() - cy   # positive = down on screen
         sat = min(1.0, math.sqrt(dx * dx + dy * dy) / _COLOR_R)
-        hue = math.degrees(math.atan2(-dy, dx)) % 360
+        # Wheel is CW from right, Red at bottom (90° CW). Subtract 90° to get standard hue.
+        cw_angle = math.degrees(math.atan2(dy, dx)) % 360
+        hue      = (cw_angle - 90.0) % 360.0
         return hue, sat
 
     def _handle_panel_drag(self, pos: QPointF):
@@ -665,10 +667,6 @@ class LightsWidget(QWidget):
             p.setBrush(QColor("#C8B09A"))
             p.drawEllipse(QPointF(hx, hy), 9.0, 9.0)
 
-        # Center percentage label
-        p.setPen(QColor(220, 220, 220))
-        p.setFont(QFont("Inter", 16, QFont.Weight.Medium))
-        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"{int(round(value * 100))}%")
 
     def _draw_color_picker(self, p: QPainter, px: float, hue: float, sat: float):
         cx = px + _COLOR_CX
@@ -680,11 +678,11 @@ class LightsWidget(QWidget):
             ih = self._color_wheel_pix.height()
             p.drawPixmap(int(cx - iw / 2), int(cy - ih / 2), self._color_wheel_pix)
 
-        # Picker handle position (hue = CCW angle from right / 3 o'clock)
-        hue_rad = math.radians(hue)
-        hr      = sat * _COLOR_R
-        hpx     = cx + math.cos(hue_rad) * hr
-        hpy     = cy - math.sin(hue_rad) * hr
+        # Wheel is CW from right, Red at bottom. Rotate standard hue by +90° to screen position.
+        cw_rad = math.radians((hue + 90.0) % 360.0)
+        hr     = sat * _COLOR_R
+        hpx    = cx + math.cos(cw_rad) * hr
+        hpy    = cy + math.sin(cw_rad) * hr   # +sin because CW = y goes down
 
         # Picker.png handle
         if not self._picker_pix.isNull():
