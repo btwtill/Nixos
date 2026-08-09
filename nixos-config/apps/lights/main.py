@@ -1,5 +1,6 @@
 from __future__ import annotations
 import sys
+import math
 from pathlib import Path
 from PyQt6.QtCore import Qt, QRectF, QPointF, QTimer
 from PyQt6.QtGui import (
@@ -36,6 +37,20 @@ _PANEL_SLIDE = 50    # px off-screen offset when hidden
 _FP_PAN_MIN = -280   # max left pan (px) when panel open
 _FP_PAN_MAX = 0      # don't pan past default
 _ANIM_EASE  = 0.18   # easing factor per frame (~60 fps)
+
+# Panel content layout (panel-local coordinates, origin = panel top-left)
+_ARC_CX    = PANEL_W // 2           # 171
+_ARC_CY    = PANEL_H // 4           # 111
+_ARC_R     = 80.0
+_ARC_TW    = 12.0
+_ARC_START = 225.0                  # screen angle at value=0 (lower-left), 0°=top CW+
+_ARC_SPAN  = 270.0                  # clockwise sweep to value=1 (lower-right)
+
+_COLOR_CX  = PANEL_W // 2           # 171
+_COLOR_CY  = (PANEL_H * 3) // 4     # 335
+_COLOR_R   = 90.0                   # interactive radius of the color wheel
+_PICKER_SZ = 20                     # picker handle display size (px)
+_COLOR_DOT = 7                      # radius of current-color indicator dot
 
 # ── Preset row ─────────────────────────────────────────────────────────────────
 _BTN_PAD = 8
@@ -80,10 +95,13 @@ _BR   = 24.0
 # ── Data classes ───────────────────────────────────────────────────────────────
 
 class _Light:
-    __slots__ = ("pos", "selected")
+    __slots__ = ("pos", "selected", "intensity", "hue", "saturation")
     def __init__(self, pos: QPointF):
-        self.pos      = pos     # centre in floorplan-local coords
-        self.selected = False
+        self.pos        = pos     # centre in floorplan-local coords
+        self.selected   = False
+        self.intensity  = 1.0    # 0–1
+        self.hue        = 30.0   # degrees (0=red, CCW from 3-o'clock)
+        self.saturation = 0.0    # 0–1
 
 
 class _PresetBtn:
@@ -138,6 +156,29 @@ def _build_right_btns() -> list[_PresetBtn]:
         btns.insert(0, _PresetBtn(pn, ph, mode, QRectF(x, PRESETS_Y + _BTN_PAD, w, _BTN_H)))
         x -= _BTN_GAP
     return btns
+
+
+def _lerp_color(a: QColor, b: QColor, t: float) -> QColor:
+    return QColor(
+        int(a.red()   + t * (b.red()   - a.red())),
+        int(a.green() + t * (b.green() - a.green())),
+        int(a.blue()  + t * (b.blue()  - a.blue())),
+    )
+
+_ARC_FILL_STOPS = [
+    (0.0, QColor(100,  70,  30)),
+    (0.5, QColor(220, 160,  80)),
+    (1.0, QColor(255, 220, 140)),
+]
+
+def _sample_arc_color(t: float) -> QColor:
+    for i in range(len(_ARC_FILL_STOPS) - 1):
+        p0, c0 = _ARC_FILL_STOPS[i]
+        p1, c1 = _ARC_FILL_STOPS[i + 1]
+        if p0 <= t <= p1:
+            f = (t - p0) / (p1 - p0) if p1 > p0 else 0.0
+            return _lerp_color(c0, c1, f)
+    return _ARC_FILL_STOPS[-1][1]
 
 
 def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
@@ -209,14 +250,17 @@ class LightsWidget(QWidget):
         self._drag_offset            = QPointF(0, 0)
 
         # Floorplan pan
-        self._fp_offset_x: float     = 0.0   # current rendered offset (px, ≤ 0)
-        self._fp_offset_target: float = 0.0  # animation target
+        self._fp_offset_x: float     = 0.0
+        self._fp_offset_target: float = 0.0
         self._fp_pan_start_x: float | None  = None
         self._fp_pan_offset_start: float    = 0.0
 
         # Side panel animation
-        self._panel_progress: float = 0.0   # 0 = hidden, 1 = fully shown
+        self._panel_progress: float = 0.0
         self._panel_target:   float = 0.0
+
+        # Panel content interaction
+        self._panel_drag_mode: str | None = None   # 'arc' or 'color'
 
         # Animation timer (~60 fps)
         self._anim_timer = QTimer(self)
@@ -228,6 +272,8 @@ class LightsWidget(QWidget):
         self._panel_pix      = QPixmap(str(ASSETS_DIR / "LightsSidePanelBackground.png"))
         self._pager_active   = QPixmap(str(ASSETS_DIR / "PagerPerlActive.png"))
         self._pager_inactive = QPixmap(str(ASSETS_DIR / "PagerPerlInactive.png"))
+        self._color_wheel_pix = QPixmap(str(ASSETS_DIR / "ColorPicker.png"))
+        self._picker_pix      = QPixmap(str(ASSETS_DIR / "Picker.png"))
 
         self._light_pix: dict[str, QPixmap] = {}
         for sel in ("Default", "Selected"):
@@ -277,35 +323,37 @@ class LightsWidget(QWidget):
         return any(l.selected for l in self._lights)
 
     def _update_panel_state(self, newly_selected: _Light | None = None):
-        """Call after any selection change. Animates panel in/out and auto-pans."""
         was_open = self._panel_target > 0.5
         any_sel  = self._any_selected()
         self._panel_target = 1.0 if any_sel else 0.0
 
         if any_sel:
-            # Auto-pan so the relevant light isn't hidden behind the panel
             light = newly_selected or next((l for l in self._lights if l.selected), None)
             if light is not None:
                 self._auto_pan_for(light)
         else:
-            self._fp_offset_target = 0.0   # return to default when panel closes
+            self._fp_offset_target = 0.0
 
         self._anim_timer.start()
 
     def _auto_pan_for(self, light: _Light):
-        """If the light is behind the panel, shift the floorplan left to reveal it."""
         light_screen_x = FLOORPLAN_X + light.pos.x() + self._fp_offset_x
-        # The panel covers [PANEL_X, PANEL_X + PANEL_W] on screen.
-        # We want the light centre to be at least (PANEL_X - _LIGHT_SZ) to stay visible.
-        visible_limit = PANEL_X - _LIGHT_SZ
+        visible_limit  = PANEL_X - _LIGHT_SZ
         if light_screen_x > visible_limit:
             shift = visible_limit - (FLOORPLAN_X + light.pos.x())
             self._fp_offset_target = max(_FP_PAN_MIN, shift)
-        # If already visible, leave the offset as-is so the user's pan is not reset
 
     def _fp_pan_limits(self) -> tuple[float, float]:
         lo = _FP_PAN_MIN if self._panel_target > 0.1 else 0.0
         return lo, _FP_PAN_MAX
+
+    def _panel_screen_x(self) -> float:
+        return float(PANEL_X + int((1.0 - self._panel_progress) * _PANEL_SLIDE))
+
+    def _in_panel(self, pos: QPointF) -> bool:
+        if self._panel_progress < 0.1:
+            return False
+        return QRectF(self._panel_screen_x(), PANEL_Y, PANEL_W, PANEL_H).contains(pos)
 
     # ── Light state helpers ───────────────────────────────────────────────────
 
@@ -332,7 +380,7 @@ class LightsWidget(QWidget):
 
     def _on_btn_release(self, btn: _PresetBtn):
         if btn is self._left_btns[2]:    # LightSettings toggle
-            if not self._options_mode:   # just turned OFF — cancel drag
+            if not self._options_mode:
                 self._dragging = None
             self.update()
         elif btn is self._left_btns[3]:  # AddLight
@@ -340,8 +388,64 @@ class LightsWidget(QWidget):
             light          = _Light(QPointF(FLOORPLAN_W / 2, FLOORPLAN_H / 2))
             light.selected = True
             self._lights.append(light)
-            self._left_btns[2].toggled = True   # force options mode on
+            self._left_btns[2].toggled = True
             self._update_panel_state(newly_selected=light)
+
+    # ── Panel content interaction ─────────────────────────────────────────────
+
+    def _panel_content_hit(self, pos: QPointF) -> str | None:
+        """Return 'arc' or 'color' if the position is over that control."""
+        if self._panel_progress < 0.5 or self._options_mode or not self._any_selected():
+            return None
+        px = self._panel_screen_x()
+        # Arc slider: annular region around the ring
+        dx = pos.x() - (px + _ARC_CX)
+        dy = pos.y() - (PANEL_Y + _ARC_CY)
+        dist = math.sqrt(dx * dx + dy * dy)
+        if abs(dist - _ARC_R) < _ARC_TW * 2 + 14:
+            return 'arc'
+        # Color wheel disc
+        dx2 = pos.x() - (px + _COLOR_CX)
+        dy2 = pos.y() - (PANEL_Y + _COLOR_CY)
+        if math.sqrt(dx2 * dx2 + dy2 * dy2) <= _COLOR_R + _PICKER_SZ:
+            return 'color'
+        return None
+
+    def _arc_value_from_pos(self, pos: QPointF, px: float) -> float:
+        cx    = px + _ARC_CX
+        cy    = float(PANEL_Y + _ARC_CY)
+        dx    = pos.x() - cx
+        dy    = pos.y() - cy
+        angle = math.degrees(math.atan2(dx, -dy)) % 360
+        rel   = (angle - _ARC_START) % 360
+        if rel <= _ARC_SPAN:
+            return rel / _ARC_SPAN
+        return 1.0 if (rel - _ARC_SPAN) < (360 - _ARC_SPAN) / 2 else 0.0
+
+    def _color_from_pos(self, pos: QPointF, px: float) -> tuple[float, float]:
+        cx  = px + _COLOR_CX
+        cy  = float(PANEL_Y + _COLOR_CY)
+        dx  = pos.x() - cx
+        dy  = pos.y() - cy
+        sat = min(1.0, math.sqrt(dx * dx + dy * dy) / _COLOR_R)
+        hue = math.degrees(math.atan2(-dy, dx)) % 360
+        return hue, sat
+
+    def _handle_panel_drag(self, pos: QPointF):
+        px = self._panel_screen_x()
+        if self._panel_drag_mode == 'arc':
+            v = self._arc_value_from_pos(pos, px)
+            for l in self._lights:
+                if l.selected:
+                    l.intensity = v
+            self.update()
+        elif self._panel_drag_mode == 'color':
+            hue, sat = self._color_from_pos(pos, px)
+            for l in self._lights:
+                if l.selected:
+                    l.hue = hue
+                    l.saturation = sat
+            self.update()
 
     # ── Interaction ───────────────────────────────────────────────────────────
 
@@ -351,6 +455,15 @@ class LightsWidget(QWidget):
         pos = ev.position()
 
         if self._page == 0:
+            # 0. Panel area — consume all clicks; handle content when not in options mode
+            if self._in_panel(pos) and self._panel_progress > 0.5:
+                if not self._options_mode:
+                    hit = self._panel_content_hit(pos)
+                    if hit:
+                        self._panel_drag_mode = hit
+                        self._handle_panel_drag(pos)
+                return
+
             # 1. Preset buttons
             for btn in self._left_btns + self._right_btns:
                 if btn.rect.contains(pos):
@@ -366,8 +479,6 @@ class LightsWidget(QWidget):
                 for i, light in enumerate(self._lights):
                     if self._light_rect(light).contains(pos):
                         if self._options_mode:
-                            # In movable state: always select and start drag;
-                            # tapping again does NOT deselect.
                             light.selected = True
                             self._dragging    = i
                             self._drag_offset = QPointF(
@@ -375,7 +486,6 @@ class LightsWidget(QWidget):
                                 pos.y() - (FLOORPLAN_Y + light.pos.y()),
                             )
                         else:
-                            # Normal state: tap toggles selection.
                             light.selected = not light.selected
                         self._update_panel_state(
                             newly_selected=light if light.selected else None
@@ -393,6 +503,10 @@ class LightsWidget(QWidget):
 
     def mouseMoveEvent(self, ev):
         pos = ev.position()
+
+        if self._panel_drag_mode is not None:
+            self._handle_panel_drag(pos)
+            return
 
         if self._dragging is not None:
             half  = _LIGHT_SZ / 2
@@ -414,7 +528,7 @@ class LightsWidget(QWidget):
             delta = pos.x() - self._fp_pan_start_x
             lo, hi = self._fp_pan_limits()
             self._fp_offset_x      = max(lo, min(hi, self._fp_pan_offset_start + delta))
-            self._fp_offset_target = self._fp_offset_x   # follow finger exactly
+            self._fp_offset_target = self._fp_offset_x
             self.update()
 
     def mouseReleaseEvent(self, ev):
@@ -422,13 +536,17 @@ class LightsWidget(QWidget):
             return
         pos = ev.position()
 
+        if self._panel_drag_mode is not None:
+            self._panel_drag_mode = None
+            return
+
         if self._dragging is not None:
             self._dragging = None
             return
 
         if self._fp_pan_start_x is not None:
             delta = pos.x() - self._fp_pan_start_x
-            if abs(delta) < 8:       # was a tap, not a pan → deselect all
+            if abs(delta) < 8:
                 self._deselect_all()
                 self._update_panel_state()
             self._fp_pan_start_x = None
@@ -471,6 +589,7 @@ class LightsWidget(QWidget):
         else:
             self._draw_page2(p)
 
+        self._draw_pager(p)
         p.end()
 
     def _draw_page1(self, p: QPainter):
@@ -509,7 +628,105 @@ class LightsWidget(QWidget):
             p.setOpacity(self._panel_progress)
             p.drawPixmap(PANEL_X + slide_x, PANEL_Y, self._panel_pix)
             p.restore()
+            if not self._options_mode and self._any_selected():
+                self._draw_panel_content(p, float(PANEL_X + slide_x))
 
+    # ── Panel content (intensity ring + color picker) ─────────────────────────
+
+    def _draw_panel_content(self, p: QPainter, px: float):
+        ref = next((l for l in self._lights if l.selected), None)
+        if ref is None:
+            return
+        p.save()
+        p.setOpacity(self._panel_progress)
+        self._draw_intensity_arc(p, px, ref.intensity)
+        self._draw_color_picker(p, px, ref.hue, ref.saturation)
+        p.restore()
+
+    def _draw_intensity_arc(self, p: QPainter, px: float, value: float):
+        cx   = px + _ARC_CX
+        cy   = float(PANEL_Y + _ARC_CY)
+        r    = _ARC_R
+        rect = QRectF(cx - r, cy - r, r * 2, r * 2)
+
+        # Qt arc system: 0°=3 o'clock, CCW+, 1/16° units
+        # Screen system: 0°=12 o'clock, CW+
+        qt_start = 90.0 - _ARC_START   # = -135
+        qt_dir   = -1                   # CW on screen = decreasing Qt angle
+        qt_span  = qt_dir * _ARC_SPAN  # = -270
+
+        # Track (full range)
+        p.setPen(QPen(QColor(0x25, 0x25, 0x25, 200), _ARC_TW,
+                      Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawArc(rect, int(qt_start * 16), int(qt_span * 16))
+
+        # Gradient fill (0 → value)
+        if value > 0.001:
+            n = 60
+            for i in range(n):
+                t0 = i / n
+                if t0 >= value:
+                    break
+                t1  = min((i + 1) / n, value)
+                col = _sample_arc_color((t0 + t1) / 2)
+                is_first = (i == 0)
+                is_last  = (t1 >= value)
+                cap = Qt.PenCapStyle.RoundCap if (is_first or is_last) else Qt.PenCapStyle.FlatCap
+                p.setPen(QPen(col, _ARC_TW, Qt.PenStyle.SolidLine, cap))
+                seg_s = qt_start + qt_dir * t0 * _ARC_SPAN
+                seg_n = qt_dir * (t1 - t0) * _ARC_SPAN
+                p.drawArc(rect, int(seg_s * 16), int(seg_n * 16))
+
+        # Handle knob
+        ha  = _ARC_START + value * _ARC_SPAN
+        hx  = cx + r * math.sin(math.radians(ha))
+        hy  = cy - r * math.cos(math.radians(ha))
+        p.setPen(QPen(QColor(255, 255, 255, 180), 2.0))
+        p.setBrush(_sample_arc_color(value))
+        p.drawEllipse(QPointF(hx, hy), 9.0, 9.0)
+
+        # Center percentage label
+        p.setPen(QColor(220, 220, 220))
+        p.setFont(QFont("Inter", 16, QFont.Weight.Medium))
+        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"{int(round(value * 100))}%")
+
+    def _draw_color_picker(self, p: QPainter, px: float, hue: float, sat: float):
+        cx = px + _COLOR_CX
+        cy = float(PANEL_Y + _COLOR_CY)
+
+        # Color wheel image
+        if not self._color_wheel_pix.isNull():
+            iw = self._color_wheel_pix.width()
+            ih = self._color_wheel_pix.height()
+            p.drawPixmap(int(cx - iw / 2), int(cy - ih / 2), self._color_wheel_pix)
+
+        # Picker handle position (hue = CCW angle from right / 3 o'clock)
+        hue_rad = math.radians(hue)
+        hr      = sat * _COLOR_R
+        hpx     = cx + math.cos(hue_rad) * hr
+        hpy     = cy - math.sin(hue_rad) * hr
+
+        # Picker.png handle
+        if not self._picker_pix.isNull():
+            pix = self._picker_pix.scaled(
+                _PICKER_SZ, _PICKER_SZ,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            p.drawPixmap(int(hpx - _PICKER_SZ / 2), int(hpy - _PICKER_SZ / 2), pix)
+        else:
+            p.setPen(QPen(QColor(255, 255, 255, 200), 2.0))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawEllipse(QPointF(hpx, hpy), float(_PICKER_SZ / 2), float(_PICKER_SZ / 2))
+
+        # Small circle showing the current color at the picker centre
+        cur_color = QColor.fromHsvF(hue / 360.0, sat, 1.0)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(cur_color)
+        p.drawEllipse(QPointF(hpx, hpy), float(_COLOR_DOT), float(_COLOR_DOT))
+
+    # ── Page 2 ────────────────────────────────────────────────────────────────
 
     def _draw_page2(self, p: QPainter):
         for idx, pix in enumerate(self._scene_pixmaps):
