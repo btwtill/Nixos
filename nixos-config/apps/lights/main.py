@@ -5,7 +5,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QRectF, QPointF, QTimer
 from PyQt6.QtGui import (
     QPainter, QColor, QFont,
-    QRadialGradient, QPainterPath, QPen, QPixmap,
+    QRadialGradient, QLinearGradient, QPainterPath, QPen, QPixmap,
 )
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget
 
@@ -26,7 +26,8 @@ PRESETS_H = 73
 PRESETS_X = (W - PRESETS_W) // 2
 PRESETS_Y = FLOORPLAN_Y + FLOORPLAN_H + 5  # 366
 
-_LIGHT_SZ = 40   # light icon display size (px)
+_LIGHT_SZ     = 40   # default light icon display size (px)
+_LIGHT_SZ_BIG = 56   # main/ceiling light icon display size (px)
 
 # Side panel — right edge flush with floorplan right edge
 PANEL_W     = 342
@@ -53,6 +54,26 @@ _COLOR_CY  = (PANEL_H * 3) // 4     # 335
 _COLOR_R   = 82.0                   # interactive radius of the color wheel
 _PICKER_SZ = 20                     # picker handle display size (px)
 _COLOR_DOT = 5                      # radius of current-color indicator dot
+
+# Options-mode panel layout (panel-local coordinates)
+_LIST_X      = 67     # list left x
+_LIST_Y      = 80     # list top y
+_LIST_W      = 240    # list width
+_LIST_H      = 288    # list height
+_LIST_ITEM_H = 73     # item height (matches LightListItemBackdrop)
+_LIST_ITEM_W = 223    # item backdrop width
+_LIST_FADE_H = 90     # top/bottom fade height
+
+# Placeholder HA entity names — replace with real HA entities later
+_HA_LIGHT_NAMES: list[str] = [
+    "AmbientLight 01",
+    "Ceiling Light 01",
+    "Ceiling Light 02",
+    "Corner Light 01",
+    "Floor Lamp",
+    "Table Lamp",
+    "Wall Sconce",
+]
 
 # ── Preset row ─────────────────────────────────────────────────────────────────
 _BTN_PAD = 8
@@ -97,13 +118,15 @@ _BR   = 24.0
 # ── Data classes ───────────────────────────────────────────────────────────────
 
 class _Light:
-    __slots__ = ("pos", "selected", "intensity", "hue", "saturation")
+    __slots__ = ("pos", "selected", "intensity", "hue", "saturation", "is_main", "ha_name")
     def __init__(self, pos: QPointF):
         self.pos        = pos     # centre in floorplan-local coords
         self.selected   = False
         self.intensity  = 1.0    # 0–1
         self.hue        = 30.0   # degrees (0=red, CCW from 3-o'clock)
         self.saturation = 0.0    # 0–1
+        self.is_main    = False  # True → uses Big icon variant (ceiling/main light)
+        self.ha_name: str | None = None  # assigned HA entity name
 
 
 class _PresetBtn:
@@ -238,8 +261,13 @@ class LightsWidget(QWidget):
         self._panel_progress: float = 0.0
         self._panel_target:   float = 0.0
 
-        # Panel content interaction
+        # Panel content interaction (normal mode)
         self._panel_drag_mode: str | None = None   # 'arc' or 'color'
+
+        # Options-mode panel interaction
+        self._list_scroll:      float       = 0.0
+        self._list_scroll_start: float      = 0.0
+        self._list_drag_start_y: float | None = None
 
         # Animation timer (~60 fps)
         self._anim_timer = QTimer(self)
@@ -255,18 +283,24 @@ class LightsWidget(QWidget):
         self._picker_pix          = QPixmap(str(ASSETS_DIR / "Picker.png"))
         self._slider_backdrop_pix = QPixmap(str(ASSETS_DIR / "sliderbackdrop_dark.png"))
         self._slider_knob_pix     = QPixmap(str(ASSETS_DIR / "sliderknob_dark.png"))
+        self._toggle_backdrop_pix = QPixmap(str(ASSETS_DIR / "LightToggle_Backdrop.png"))
+        self._toggle_knob_pix     = QPixmap(str(ASSETS_DIR / "LightToggle_Knob.png"))
+        self._list_item_pix       = QPixmap(str(ASSETS_DIR / "LightListItemBackdrop.png"))
+        self._remove_btn_pix      = QPixmap(str(ASSETS_DIR / "RemoveLight_Button.png"))
 
         self._light_pix: dict[str, QPixmap] = {}
         for sel in ("Default", "Selected"):
-            for move in ("True", "False"):
-                key = f"{sel}_Default_{move}"
-                raw = QPixmap(str(ASSETS_DIR / f"{key}.png"))
-                if not raw.isNull():
-                    self._light_pix[key] = raw.scaled(
-                        _LIGHT_SZ, _LIGHT_SZ,
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
+            for size in ("Default", "Big"):
+                for move in ("True", "False"):
+                    key = f"{sel}_{size}_{move}"
+                    sz  = _LIGHT_SZ_BIG if size == "Big" else _LIGHT_SZ
+                    raw = QPixmap(str(ASSETS_DIR / f"{key}.png"))
+                    if not raw.isNull():
+                        self._light_pix[key] = raw.scaled(
+                            sz, sz,
+                            Qt.AspectRatioMode.KeepAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
 
         self._left_btns  = _build_left_btns()
         self._right_btns = _build_right_btns()
@@ -344,14 +378,16 @@ class LightsWidget(QWidget):
 
     def _light_pix_key(self, light: _Light) -> str:
         sel  = "Selected" if light.selected else "Default"
+        size = "Big"      if light.is_main  else "Default"
         move = "True"     if self._options_mode else "False"
-        return f"{sel}_Default_{move}"
+        return f"{sel}_{size}_{move}"
 
     def _light_rect(self, light: _Light) -> QRectF:
-        half = _LIGHT_SZ / 2
+        sz   = _LIGHT_SZ_BIG if light.is_main else _LIGHT_SZ
+        half = sz / 2
         cx   = FLOORPLAN_X + light.pos.x() + self._fp_offset_x
         cy   = FLOORPLAN_Y + light.pos.y()
-        return QRectF(cx - half, cy - half, _LIGHT_SZ, _LIGHT_SZ)
+        return QRectF(cx - half, cy - half, sz, sz)
 
     def _deselect_all(self):
         for l in self._lights:
@@ -439,9 +475,11 @@ class LightsWidget(QWidget):
         pos = ev.position()
 
         if self._page == 0:
-            # 0. Panel area — consume all clicks; handle content when not in options mode
+            # 0. Panel area — always consumed; route to options or normal content
             if self._in_panel(pos) and self._panel_progress > 0.5:
-                if not self._options_mode:
+                if self._options_mode and self._any_selected():
+                    self._handle_options_panel_press(pos)
+                elif not self._options_mode:
                     hit = self._panel_content_hit(pos)
                     if hit:
                         self._panel_drag_mode = hit
@@ -492,6 +530,13 @@ class LightsWidget(QWidget):
             self._handle_panel_drag(pos)
             return
 
+        if self._list_drag_start_y is not None:
+            delta    = self._list_drag_start_y - pos.y()
+            max_scr  = max(0.0, len(_HA_LIGHT_NAMES) * _LIST_ITEM_H - _LIST_H)
+            self._list_scroll = max(0.0, min(max_scr, self._list_scroll_start + delta))
+            self.update()
+            return
+
         if self._dragging is not None:
             half  = _LIGHT_SZ / 2
             light = self._lights[self._dragging]
@@ -522,6 +567,19 @@ class LightsWidget(QWidget):
 
         if self._panel_drag_mode is not None:
             self._panel_drag_mode = None
+            return
+
+        if self._list_drag_start_y is not None:
+            if abs(pos.y() - self._list_drag_start_y) < 8:
+                # Tap → assign HA entity to selected lights
+                iy  = pos.y() - (PANEL_Y + _LIST_Y) + self._list_scroll
+                idx = int(iy // _LIST_ITEM_H)
+                if 0 <= idx < len(_HA_LIGHT_NAMES):
+                    for l in self._lights:
+                        if l.selected:
+                            l.ha_name = _HA_LIGHT_NAMES[idx]
+                    self.update()
+            self._list_drag_start_y = None
             return
 
         if self._dragging is not None:
@@ -612,8 +670,11 @@ class LightsWidget(QWidget):
             p.setOpacity(self._panel_progress)
             p.drawPixmap(PANEL_X + slide_x, PANEL_Y, self._panel_pix)
             p.restore()
-            if not self._options_mode and self._any_selected():
-                self._draw_panel_content(p, float(PANEL_X + slide_x))
+            if self._any_selected():
+                if self._options_mode:
+                    self._draw_panel_options(p, float(PANEL_X + slide_x))
+                else:
+                    self._draw_panel_content(p, float(PANEL_X + slide_x))
 
     # ── Panel content (intensity ring + color picker) ─────────────────────────
 
@@ -702,6 +763,118 @@ class LightsWidget(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(cur_color)
         p.drawEllipse(QPointF(hpx, hpy), float(_COLOR_DOT), float(_COLOR_DOT))
+
+    # ── Options-mode panel (toggle + list + remove) ───────────────────────────
+
+    def _handle_options_panel_press(self, pos: QPointF):
+        px = self._panel_screen_x()
+
+        # Toggle button
+        bw = self._toggle_backdrop_pix.width()  if not self._toggle_backdrop_pix.isNull() else 96
+        bh = self._toggle_backdrop_pix.height() if not self._toggle_backdrop_pix.isNull() else 51
+        bx = px + (PANEL_W - bw) / 2
+        if QRectF(bx, PANEL_Y + 20, bw, bh).contains(pos):
+            for l in self._lights:
+                if l.selected:
+                    l.is_main = not l.is_main
+            self.update()
+            return
+
+        # Remove button
+        rw = self._remove_btn_pix.width()  if not self._remove_btn_pix.isNull() else 96
+        rh = self._remove_btn_pix.height() if not self._remove_btn_pix.isNull() else 46
+        rx = px + (PANEL_W - rw) / 2
+        ry = PANEL_Y + PANEL_H - 40 - rh
+        if QRectF(rx, ry, rw, rh).contains(pos):
+            self._lights = [l for l in self._lights if not l.selected]
+            self._dragging = None
+            self._update_panel_state()
+            return
+
+        # Light list — start scroll / tap tracking
+        list_rect = QRectF(px + _LIST_X, PANEL_Y + _LIST_Y, _LIST_W, _LIST_H)
+        if list_rect.contains(pos):
+            self._list_drag_start_y  = pos.y()
+            self._list_scroll_start  = self._list_scroll
+
+    def _draw_panel_options(self, p: QPainter, px: float):
+        ref = next((l for l in self._lights if l.selected), None)
+        if ref is None:
+            return
+        p.save()
+        p.setOpacity(self._panel_progress)
+
+        # ── Toggle button ──────────────────────────────────────────────────────
+        bw = self._toggle_backdrop_pix.width()  if not self._toggle_backdrop_pix.isNull() else 96
+        bh = self._toggle_backdrop_pix.height() if not self._toggle_backdrop_pix.isNull() else 51
+        bx = int(px + (PANEL_W - bw) / 2)
+        by = PANEL_Y + 20
+        if not self._toggle_backdrop_pix.isNull():
+            p.drawPixmap(bx, by, self._toggle_backdrop_pix)
+        if not self._toggle_knob_pix.isNull():
+            kw = self._toggle_knob_pix.width()
+            kh = self._toggle_knob_pix.height()
+            ky = by + (bh - kh) // 2
+            kx = bx + bw - kw - 2 if ref.is_main else bx + 2
+            p.drawPixmap(kx, ky, self._toggle_knob_pix)
+
+        # ── Light list with fade ───────────────────────────────────────────────
+        lx = int(px + _LIST_X)
+        ly = PANEL_Y + _LIST_Y
+
+        list_pix = QPixmap(_LIST_W, _LIST_H)
+        list_pix.fill(Qt.GlobalColor.transparent)
+        lp = QPainter(list_pix)
+        lp.setRenderHint(QPainter.RenderHint.Antialiasing)
+        lp.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+
+        scroll = self._list_scroll
+        for i, name in enumerate(_HA_LIGHT_NAMES):
+            iy = int(i * _LIST_ITEM_H - scroll)
+            if iy + _LIST_ITEM_H < 0 or iy > _LIST_H:
+                continue
+            ix = (_LIST_W - _LIST_ITEM_W) // 2
+            # Backdrop
+            if not self._list_item_pix.isNull():
+                is_sel = ref.ha_name == name
+                if is_sel:
+                    lp.setOpacity(1.0)
+                else:
+                    lp.setOpacity(0.55)
+                lp.drawPixmap(ix, iy, self._list_item_pix)
+                lp.setOpacity(1.0)
+            # Name
+            is_sel = ref.ha_name == name
+            lp.setPen(QColor(255, 255, 255) if is_sel else QColor(160, 160, 160))
+            lp.setFont(QFont("Inter", 14,
+                             QFont.Weight.SemiBold if is_sel else QFont.Weight.Normal))
+            lp.drawText(QRectF(ix, iy, _LIST_ITEM_W, _LIST_ITEM_H),
+                        Qt.AlignmentFlag.AlignCenter, name)
+
+        # Fade mask (DestinationIn keeps alpha where mask is opaque)
+        lp.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_DestinationIn)
+        top_grad = QLinearGradient(0, 0, 0, _LIST_FADE_H)
+        top_grad.setColorAt(0.0, QColor(0, 0, 0, 0))
+        top_grad.setColorAt(1.0, QColor(0, 0, 0, 255))
+        lp.fillRect(QRectF(0, 0, _LIST_W, _LIST_FADE_H), top_grad)
+        bot_grad = QLinearGradient(0, _LIST_H - _LIST_FADE_H, 0, _LIST_H)
+        bot_grad.setColorAt(0.0, QColor(0, 0, 0, 255))
+        bot_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+        lp.fillRect(QRectF(0, _LIST_H - _LIST_FADE_H, _LIST_W, _LIST_FADE_H), bot_grad)
+        lp.end()
+
+        p.drawPixmap(lx, ly, list_pix)
+
+        # ── Remove button ──────────────────────────────────────────────────────
+        if not self._remove_btn_pix.isNull():
+            rw = self._remove_btn_pix.width()
+            rh = self._remove_btn_pix.height()
+            rx = int(px + (PANEL_W - rw) / 2)
+            ry = PANEL_Y + PANEL_H - 40 - rh
+            p.drawPixmap(rx, ry, self._remove_btn_pix)
+
+        p.restore()
 
     # ── Page 2 ────────────────────────────────────────────────────────────────
 
