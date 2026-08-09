@@ -295,6 +295,12 @@ class LightsWidget(QWidget):
         self._ha_refresh_timer.start()
         threading.Thread(target=self._fetch_ha_lights, daemon=True).start()
 
+        # Layout persistence
+        self._save_debounce = QTimer(self)
+        self._save_debounce.setSingleShot(True)
+        self._save_debounce.setInterval(500)
+        self._save_debounce.timeout.connect(self._do_save_layout)
+
         # Assets
         self._floorplan_pix  = QPixmap(str(ASSETS_DIR / "floorplan.png"))
         self._panel_pix      = QPixmap(str(ASSETS_DIR / "LightsSidePanelBackground.png"))
@@ -329,6 +335,8 @@ class LightsWidget(QWidget):
         self._scene_pixmaps: list[QPixmap] = [
             _scene_button_pixmap(_SQ, name, colors) for name, colors in _SCENES
         ]
+
+        self._load_layout()
 
     # ── Home Assistant ────────────────────────────────────────────────────────
 
@@ -376,6 +384,48 @@ class LightsWidget(QWidget):
                 args=(eid, hue, sat),
                 daemon=True,
             ).start()
+
+    # ── Layout persistence ────────────────────────────────────────────────────
+
+    _LAYOUT_PATH = Path.home() / ".local" / "share" / "lights-app" / "layout.json"
+
+    def _schedule_save(self):
+        self._save_debounce.start()
+
+    def _do_save_layout(self):
+        import json as _json
+        data = [
+            {
+                "x":          l.pos.x(),
+                "y":          l.pos.y(),
+                "is_main":    l.is_main,
+                "ha_name":    l.ha_name,
+                "intensity":  l.intensity,
+                "hue":        l.hue,
+                "saturation": l.saturation,
+            }
+            for l in self._lights
+        ]
+        self._LAYOUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        self._LAYOUT_PATH.write_text(_json.dumps(data, indent=2))
+
+    def _load_layout(self):
+        import json as _json
+        try:
+            data = _json.loads(self._LAYOUT_PATH.read_text())
+        except (FileNotFoundError, _json.JSONDecodeError, OSError):
+            return
+        for entry in data:
+            try:
+                light            = _Light(QPointF(float(entry["x"]), float(entry["y"])))
+                light.is_main    = bool(entry.get("is_main", False))
+                light.ha_name    = entry.get("ha_name")
+                light.intensity  = float(entry.get("intensity", 1.0))
+                light.hue        = float(entry.get("hue", 30.0))
+                light.saturation = float(entry.get("saturation", 0.0))
+                self._lights.append(light)
+            except (KeyError, ValueError, TypeError):
+                continue
 
     # ── Animation ─────────────────────────────────────────────────────────────
 
@@ -474,6 +524,7 @@ class LightsWidget(QWidget):
             self._lights.append(light)
             self._left_btns[2].toggled = True
             self._update_panel_state(newly_selected=light)
+            self._schedule_save()
 
     # ── Panel content interaction ─────────────────────────────────────────────
 
@@ -640,6 +691,7 @@ class LightsWidget(QWidget):
 
         if self._panel_drag_mode is not None:
             self._panel_drag_mode = None
+            self._schedule_save()
             return
 
         if self._list_drag_start_y is not None:
@@ -652,11 +704,13 @@ class LightsWidget(QWidget):
                         if l.selected:
                             l.ha_name = self._ha_lights[idx]["entity_id"]
                     self.update()
+                    self._schedule_save()
             self._list_drag_start_y = None
             return
 
         if self._dragging is not None:
             self._dragging = None
+            self._schedule_save()
             return
 
         if self._fp_pan_start_x is not None:
@@ -853,6 +907,7 @@ class LightsWidget(QWidget):
                 if l.selected:
                     l.is_main = not l.is_main
             self.update()
+            self._schedule_save()
             return
 
         # Remove button
@@ -864,6 +919,7 @@ class LightsWidget(QWidget):
             self._lights = [l for l in self._lights if not l.selected]
             self._dragging = None
             self._update_panel_state()
+            self._schedule_save()
             return
 
         # Light list — start scroll / tap tracking
