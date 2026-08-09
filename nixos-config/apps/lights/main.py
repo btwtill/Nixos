@@ -287,6 +287,12 @@ class LightsWidget(QWidget):
         self._color_debounce.setInterval(150)
         self._color_debounce.timeout.connect(self._send_color)
 
+        # Retry fetching the light list every 10 s until it succeeds,
+        # then settle into a 60 s refresh cadence.
+        self._ha_refresh_timer = QTimer(self)
+        self._ha_refresh_timer.setInterval(10_000)
+        self._ha_refresh_timer.timeout.connect(self._poll_ha_lights)
+        self._ha_refresh_timer.start()
         threading.Thread(target=self._fetch_ha_lights, daemon=True).start()
 
         # Assets
@@ -326,6 +332,9 @@ class LightsWidget(QWidget):
 
     # ── Home Assistant ────────────────────────────────────────────────────────
 
+    def _poll_ha_lights(self):
+        threading.Thread(target=self._fetch_ha_lights, daemon=True).start()
+
     def _fetch_ha_lights(self):
         import os, datetime
         log_dir  = os.path.expanduser("~/.local/share/lights-app")
@@ -344,6 +353,9 @@ class LightsWidget(QWidget):
         self._ha_lights_loaded.emit(lights)
 
     def _apply_ha_lights(self, lights: list):
+        if lights:
+            # Once we have lights, slow the refresh down to every 60 s
+            self._ha_refresh_timer.setInterval(60_000)
         self._ha_lights = lights
         self.update()
 
@@ -394,7 +406,6 @@ class LightsWidget(QWidget):
         return any(l.selected for l in self._lights)
 
     def _update_panel_state(self, newly_selected: _Light | None = None):
-        was_open = self._panel_target > 0.5
         any_sel  = self._any_selected()
         self._panel_target = 1.0 if any_sel else 0.0
 
