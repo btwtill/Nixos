@@ -50,7 +50,7 @@ _ARC_SPAN     = 275.0          # CCW sweep in degrees
 
 _COLOR_CX  = PANEL_W // 2           # 171
 _COLOR_CY  = (PANEL_H * 3) // 4     # 335
-_COLOR_R   = 90.0                   # interactive radius of the color wheel
+_COLOR_R   = 82.0                   # interactive radius of the color wheel
 _PICKER_SZ = 20                     # picker handle display size (px)
 _COLOR_DOT = 5                      # radius of current-color indicator dot
 
