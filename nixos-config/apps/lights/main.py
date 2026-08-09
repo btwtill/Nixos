@@ -365,18 +365,18 @@ class LightsWidget(QWidget):
             if fp_rect.contains(pos):
                 for i, light in enumerate(self._lights):
                     if self._light_rect(light).contains(pos):
-                        was_selected   = light.selected
-                        light.selected = not light.selected
-                        if self._options_mode and light.selected:
+                        if self._options_mode:
+                            # In movable state: always select and start drag;
+                            # tapping again does NOT deselect.
+                            light.selected = True
                             self._dragging    = i
                             self._drag_offset = QPointF(
                                 pos.x() - (FLOORPLAN_X + light.pos.x() + self._fp_offset_x),
                                 pos.y() - (FLOORPLAN_Y + light.pos.y()),
                             )
-                        elif was_selected:
-                            # deselected a light that might have been the drag target
-                            if self._dragging == i:
-                                self._dragging = None
+                        else:
+                            # Normal state: tap toggles selection.
+                            light.selected = not light.selected
                         self._update_panel_state(
                             newly_selected=light if light.selected else None
                         )
@@ -494,19 +494,19 @@ class LightsWidget(QWidget):
                 p.drawPixmap(int(r.x()), int(r.y()), pix)
         p.restore()
 
-        # ── Side panel (above floorplan, below preset row) ────────────────────
+        # ── Preset row buttons ─────────────────────────────────────────────────
+        for btn in self._left_btns + self._right_btns:
+            pix = btn.current_pix
+            if pix:
+                p.drawPixmap(int(btn.rect.x()), int(btn.rect.y()), pix)
+
+        # ── Side panel — drawn last so it covers floorplan AND preset row ──────
         if self._panel_progress > 0.001 and not self._panel_pix.isNull():
             slide_x = int((1.0 - self._panel_progress) * _PANEL_SLIDE)
             p.save()
             p.setOpacity(self._panel_progress)
             p.drawPixmap(PANEL_X + slide_x, PANEL_Y, self._panel_pix)
             p.restore()
-
-        # ── Preset row buttons ─────────────────────────────────────────────────
-        for btn in self._left_btns + self._right_btns:
-            pix = btn.current_pix
-            if pix:
-                p.drawPixmap(int(btn.rect.x()), int(btn.rect.y()), pix)
 
         # Remaining gap
         gap_y = PRESETS_Y + PRESETS_H
