@@ -381,9 +381,12 @@ class LightsWidget(QWidget):
                             newly_selected=light if light.selected else None
                         )
                         return
-                # Tap on empty floorplan → begin pan tracking (resolve on release)
-                self._fp_pan_start_x      = pos.x()
-                self._fp_pan_offset_start = self._fp_offset_x
+                # Empty floorplan: pan when panel is open, page-swipe when closed
+                if self._any_selected():
+                    self._fp_pan_start_x      = pos.x()
+                    self._fp_pan_offset_start = self._fp_offset_x
+                else:
+                    self._drag_start_x = pos.x()
                 return
 
         self._drag_start_x = pos.x()
@@ -468,7 +471,6 @@ class LightsWidget(QWidget):
         else:
             self._draw_page2(p)
 
-        self._draw_pager(p)
         p.end()
 
     def _draw_page1(self, p: QPainter):
@@ -508,11 +510,6 @@ class LightsWidget(QWidget):
             p.drawPixmap(PANEL_X + slide_x, PANEL_Y, self._panel_pix)
             p.restore()
 
-        # Remaining gap
-        gap_y = PRESETS_Y + PRESETS_H
-        gap_h = CONTENT_H - gap_y
-        if gap_h > 0:
-            p.fillRect(QRectF(0, gap_y, W, gap_h), QColor(80, 80, 80, 30))
 
     def _draw_page2(self, p: QPainter):
         for idx, pix in enumerate(self._scene_pixmaps):
