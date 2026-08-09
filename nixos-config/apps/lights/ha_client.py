@@ -69,6 +69,28 @@ class HAClient:
         result.sort(key=lambda x: x["friendly_name"].lower())
         return result, ""
 
+    def get_light_full_state(self, entity_id: str) -> dict | None:
+        """Returns {"intensity": 0-1, "hue": 0-360, "saturation": 0-1} or None on error.
+
+        hue/saturation are None when HA doesn't report hs_color (e.g. white-only lights).
+        """
+        state = self.get_state(entity_id)
+        if state is None:
+            return None
+        attrs = state.get("attributes", {})
+        if state.get("state") == "off":
+            intensity = 0.0
+        else:
+            brightness = attrs.get("brightness")
+            intensity = max(0.0, min(1.0, brightness / 255.0)) if brightness is not None else 1.0
+        hs = attrs.get("hs_color")
+        if hs and len(hs) >= 2:
+            hue        = float(hs[0]) % 360.0
+            saturation = max(0.0, min(1.0, float(hs[1]) / 100.0))
+        else:
+            hue = saturation = None
+        return {"intensity": intensity, "hue": hue, "saturation": saturation}
+
     def get_light_brightness_pct(self, entity_id: str) -> float | None:
         state = self.get_state(entity_id)
         if state is None:

@@ -85,26 +85,35 @@ _RIGHT_DEFS = [
 ]
 
 # ── Page 2 scenes ──────────────────────────────────────────────────────────────
-_SCENES = [
-    ("Cozy Evening",  [(255, 130, 50),  (255,  90, 20),  (180,  50, 10)]),
-    ("Focus",         [(160, 200, 255), (180, 215, 255), (140, 185, 255)]),
-    ("Party",         [(170,  0, 255),  (255,  0, 140),  (0,  210, 255)]),
-    ("Relax",         [(50,  90, 200),  (110,  70, 200), (60, 170, 150)]),
-    ("Movie Night",   [(170,  15, 15),  (110,  35,  5),  (70,   5,  35)]),
-    ("Morning",       [(255, 215,  90), (255, 170,  70), (235, 235, 190)]),
-]
+_SCENE_SZ      = 100    # tile size px
+_SCENE_COLS    = 4      # tiles per row
+_SCENE_GAP     = 16     # px between tiles
+_SCENE_TOP_PAD = 20     # px above first row
+_SCENE_BR      = 16.0   # tile corner radius
 
-_COLS = 3
-_ROWS = 2
-_GX   = 12
-_GY   = 12
-_SQ   = min(
-    (W         - _GX * (_COLS - 1)) // _COLS,
-    (CONTENT_H - _GY * (_ROWS - 1)) // _ROWS,
-)
-_BM_X = (W         - _COLS * _SQ - _GX * (_COLS - 1)) // 2
-_BM_Y = (CONTENT_H - _ROWS * _SQ - _GY * (_ROWS - 1)) // 2
-_BR   = 24.0
+
+class _Scene:
+    def __init__(self, name: str, colors: list, lights: list, pix=None):
+        self.name         = name
+        self.colors       = colors   # list of 1–3 (r,g,b) tuples
+        self.lights       = lights   # list of {"ha_name":…, "intensity":…, "hue":…, "saturation":…}
+        self.quick_access = False
+        self.pix          = pix      # QPixmap | None
+
+
+def _lights_to_colors(lights: list) -> list:
+    """Pick up to 3 representative (r,g,b) colors from a list of _Light objects.
+
+    Prefers is_main lights; falls back to regular lights; always returns ≥1 color.
+    """
+    main   = [l for l in lights if l.is_main][:3]
+    others = [l for l in lights if not l.is_main]
+    picked = (main + others)[:3]
+    result = []
+    for l in picked:
+        c = QColor.fromHsvF(max(0.0, l.hue / 360.0), l.saturation, 1.0)
+        result.append((c.red(), c.green(), c.blue()))
+    return result or [(200, 180, 150)]
 
 
 # ── Data classes ───────────────────────────────────────────────────────────────
@@ -176,6 +185,12 @@ def _build_right_btns() -> list[_PresetBtn]:
 
 
 def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
+    # Pad / trim colors to exactly 3
+    colors = list(colors)
+    while len(colors) < 3:
+        colors.append(colors[-1])
+    colors = colors[:3]
+
     w = h = size
     pix = QPixmap(w, h)
     pix.fill(Qt.GlobalColor.transparent)
@@ -183,7 +198,7 @@ def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     full_rect = QRectF(0, 0, w, h)
     path = QPainterPath()
-    path.addRoundedRect(full_rect, _BR, _BR)
+    path.addRoundedRect(full_rect, _SCENE_BR, _SCENE_BR)
     p.setClipPath(path)
     p.fillPath(path, QColor(10, 10, 16))
     primary_pos = [(0.28, 0.28), (0.72, 0.28), (0.50, 0.75)]
@@ -219,7 +234,7 @@ def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
         p.setPen(pen)
         p.drawPath(path)
     p.setClipping(False)
-    p.setFont(QFont("Inter", 13, QFont.Weight.Medium))
+    p.setFont(QFont("Inter", 11, QFont.Weight.Medium))
     p.setPen(QColor(0x2f, 0x2f, 0x2f))
     p.drawText(full_rect, Qt.AlignmentFlag.AlignCenter, name)
     p.end()
@@ -229,7 +244,8 @@ def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
 # ── Main widget ────────────────────────────────────────────────────────────────
 
 class LightsWidget(QWidget):
-    _ha_lights_loaded = pyqtSignal(list)
+    _ha_lights_loaded  = pyqtSignal(list)
+    _ha_state_fetched  = pyqtSignal(str, object)   # entity_id, state dict
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -276,6 +292,7 @@ class LightsWidget(QWidget):
         # HA client + debounce timers
         self._ha = _hac.HAClient(_cfg.HA_URL, _cfg.HA_TOKEN)
         self._ha_lights_loaded.connect(self._apply_ha_lights)
+        self._ha_state_fetched.connect(self._apply_ha_state)
 
         self._brightness_debounce = QTimer(self)
         self._brightness_debounce.setSingleShot(True)
@@ -332,11 +349,14 @@ class LightsWidget(QWidget):
         self._left_btns  = _build_left_btns()
         self._right_btns = _build_right_btns()
 
-        self._scene_pixmaps: list[QPixmap] = [
-            _scene_button_pixmap(_SQ, name, colors) for name, colors in _SCENES
-        ]
+        # Scenes (populated from JSON; starts empty)
+        self._scenes: list[_Scene] = []
+        self._scene_scroll_y:     float          = 0.0
+        self._scene_scroll_start: float          = 0.0
+        self._scene_press_pos:    QPointF | None = None
 
         self._load_layout()
+        self._load_scenes()
 
     # ── Home Assistant ────────────────────────────────────────────────────────
 
@@ -384,6 +404,21 @@ class LightsWidget(QWidget):
                 args=(eid, hue, sat),
                 daemon=True,
             ).start()
+
+    def _sync_light_state(self, entity_id: str):
+        state = self._ha.get_light_full_state(entity_id)
+        if state is not None:
+            self._ha_state_fetched.emit(entity_id, state)
+
+    def _apply_ha_state(self, entity_id: str, state: dict):
+        for l in self._lights:
+            if l.ha_name == entity_id:
+                l.intensity = state["intensity"]
+                if state["hue"] is not None:
+                    l.hue = state["hue"]
+                if state["saturation"] is not None:
+                    l.saturation = state["saturation"]
+        self.update()
 
     # ── Layout persistence ────────────────────────────────────────────────────
 
@@ -513,7 +548,9 @@ class LightsWidget(QWidget):
     # ── Button actions ────────────────────────────────────────────────────────
 
     def _on_btn_release(self, btn: _PresetBtn):
-        if btn is self._left_btns[2]:    # LightSettings toggle
+        if btn is self._left_btns[1]:    # AddNewLightsScene
+            self._create_scene()
+        elif btn is self._left_btns[2]:  # LightSettings toggle
             if not self._options_mode:
                 self._dragging = None
             self.update()
@@ -610,8 +647,9 @@ class LightsWidget(QWidget):
                         self._handle_panel_drag(pos)
                 return
 
-            # 1. Preset buttons
-            for btn in self._left_btns + self._right_btns:
+            # 1. Preset buttons (right buttons only active when scene has quick_access)
+            quick_scenes = [s for s in self._scenes if s.quick_access]
+            for btn in self._left_btns + self._right_btns[:len(quick_scenes)]:
                 if btn.rect.contains(pos):
                     self._pressed_btn = btn
                     if btn.mode == "momentary":
@@ -633,6 +671,12 @@ class LightsWidget(QWidget):
                             )
                         else:
                             light.selected = not light.selected
+                        if light.selected and light.ha_name:
+                            threading.Thread(
+                                target=self._sync_light_state,
+                                args=(light.ha_name,),
+                                daemon=True,
+                            ).start()
                         self._update_panel_state(
                             newly_selected=light if light.selected else None
                         )
@@ -645,13 +689,25 @@ class LightsWidget(QWidget):
                     self._drag_start_x = pos.x()
                 return
 
-        self._drag_start_x = pos.x()
+        # Page 2 — scene grid scroll / tap
+        if self._page == 1:
+            self._scene_press_pos    = QPointF(pos)
+            self._scene_scroll_start = self._scene_scroll_y
+        else:
+            self._drag_start_x = pos.x()
 
     def mouseMoveEvent(self, ev):
         pos = ev.position()
 
         if self._panel_drag_mode is not None:
             self._handle_panel_drag(pos)
+            return
+
+        if self._page == 1 and self._scene_press_pos is not None:
+            dy = self._scene_press_pos.y() - pos.y()
+            self._scene_scroll_y = max(0.0, min(self._scene_max_scroll(),
+                                                self._scene_scroll_start + dy))
+            self.update()
             return
 
         if self._list_drag_start_y is not None:
@@ -734,6 +790,23 @@ class LightsWidget(QWidget):
             self.update()
             return
 
+        if self._scene_press_pos is not None:
+            pp = self._scene_press_pos
+            self._scene_press_pos = None
+            dx = pos.x() - pp.x()
+            dy = pos.y() - pp.y()
+            dist = math.sqrt(dx * dx + dy * dy)
+            if dist < 8:
+                scene = self._scene_at(pp)
+                if scene:
+                    self._apply_scene(scene)
+            elif abs(dx) > 60:
+                new = self._page + (1 if dx < 0 else -1)
+                if 0 <= new <= 1:
+                    self._page = new
+                    self.update()
+            return
+
         if self._drag_start_x is not None:
             delta = pos.x() - self._drag_start_x
             if abs(delta) > 60:
@@ -787,7 +860,10 @@ class LightsWidget(QWidget):
         p.restore()
 
         # ── Preset row buttons ─────────────────────────────────────────────────
-        for btn in self._left_btns + self._right_btns:
+        # Right buttons (quick presets) only shown when scenes have quick_access set
+        quick_scenes = [s for s in self._scenes if s.quick_access]
+        visible_right = self._right_btns[:len(quick_scenes)]
+        for btn in self._left_btns + visible_right:
             pix = btn.current_pix
             if pix:
                 p.drawPixmap(int(btn.rect.x()), int(btn.rect.y()), pix)
@@ -1003,13 +1079,134 @@ class LightsWidget(QWidget):
 
         p.restore()
 
+    # ── Scenes ────────────────────────────────────────────────────────────────
+
+    _SCENES_PATH = Path.home() / ".local" / "share" / "lights-app" / "scenes.json"
+
+    def _create_scene(self):
+        lights_with_ha = [l for l in self._lights if l.ha_name]
+        if not lights_with_ha:
+            return
+        colors = _lights_to_colors(self._lights)
+        name   = f"Scene {len(self._scenes) + 1}"
+        stored = [
+            {
+                "ha_name":    l.ha_name,
+                "intensity":  l.intensity,
+                "hue":        l.hue,
+                "saturation": l.saturation,
+            }
+            for l in lights_with_ha
+        ]
+        scene = _Scene(
+            name   = name,
+            colors = colors,
+            lights = stored,
+            pix    = _scene_button_pixmap(_SCENE_SZ, name, colors),
+        )
+        self._scenes.append(scene)
+        self._save_scenes()
+        self.update()
+
+    def _apply_scene(self, scene: _Scene):
+        for entry in scene.lights:
+            eid = entry.get("ha_name")
+            if not eid:
+                continue
+            for l in self._lights:
+                if l.ha_name == eid:
+                    l.intensity  = entry["intensity"]
+                    l.hue        = entry["hue"]
+                    l.saturation = entry["saturation"]
+            self._pending_brightness[eid] = entry["intensity"]
+            self._pending_color[eid]      = (entry["hue"], entry["saturation"])
+        self._brightness_debounce.start()
+        self._color_debounce.start()
+        self.update()
+
+    def _save_scenes(self):
+        import json as _json
+        data = [
+            {
+                "name":         s.name,
+                "colors":       s.colors,
+                "lights":       s.lights,
+                "quick_access": s.quick_access,
+            }
+            for s in self._scenes
+        ]
+        self._SCENES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        self._SCENES_PATH.write_text(_json.dumps(data, indent=2))
+
+    def _load_scenes(self):
+        import json as _json
+        try:
+            data = _json.loads(self._SCENES_PATH.read_text())
+        except (FileNotFoundError, _json.JSONDecodeError, OSError):
+            return
+        for entry in data:
+            try:
+                colors = [tuple(c) for c in entry.get("colors", [])] or [(200, 180, 150)]
+                name   = entry.get("name", "Scene")
+                scene  = _Scene(
+                    name   = name,
+                    colors = colors,
+                    lights = entry.get("lights", []),
+                    pix    = _scene_button_pixmap(_SCENE_SZ, name, colors),
+                )
+                scene.quick_access = entry.get("quick_access", False)
+                self._scenes.append(scene)
+            except Exception:
+                continue
+
+    def _scene_max_scroll(self) -> float:
+        rows    = max(1, (len(self._scenes) + _SCENE_COLS - 1) // _SCENE_COLS)
+        total_h = _SCENE_TOP_PAD + rows * (_SCENE_SZ + _SCENE_GAP) - _SCENE_GAP
+        return max(0.0, total_h - CONTENT_H)
+
+    def _scene_at(self, pos: QPointF) -> _Scene | None:
+        col_step = _SCENE_SZ + _SCENE_GAP
+        row_step = _SCENE_SZ + _SCENE_GAP
+        total_w  = _SCENE_COLS * _SCENE_SZ + (_SCENE_COLS - 1) * _SCENE_GAP
+        left     = (W - total_w) // 2
+        x = pos.x() - left
+        y = pos.y() - _SCENE_TOP_PAD + self._scene_scroll_y
+        if x < 0 or y < 0:
+            return None
+        col = int(x // col_step)
+        row = int(y // row_step)
+        if col >= _SCENE_COLS or x % col_step > _SCENE_SZ or y % row_step > _SCENE_SZ:
+            return None
+        idx = row * _SCENE_COLS + col
+        return self._scenes[idx] if 0 <= idx < len(self._scenes) else None
+
     # ── Page 2 ────────────────────────────────────────────────────────────────
 
     def _draw_page2(self, p: QPainter):
-        for idx, pix in enumerate(self._scene_pixmaps):
-            col = idx % _COLS
-            row = idx // _COLS
-            p.drawPixmap(_BM_X + col * (_SQ + _GX), _BM_Y + row * (_SQ + _GY), pix)
+        if not self._scenes:
+            p.setPen(QColor(160, 160, 160))
+            p.setFont(QFont("Inter", 14))
+            p.drawText(QRectF(0, 0, W, CONTENT_H), Qt.AlignmentFlag.AlignCenter,
+                       "No scenes yet.\nGo to the lights page and press\n\"Add New Lights Scene\".")
+            return
+
+        col_step = _SCENE_SZ + _SCENE_GAP
+        row_step = _SCENE_SZ + _SCENE_GAP
+        total_w  = _SCENE_COLS * _SCENE_SZ + (_SCENE_COLS - 1) * _SCENE_GAP
+        left     = (W - total_w) // 2
+
+        p.save()
+        p.setClipRect(QRectF(0, 0, W, CONTENT_H))
+        for i, scene in enumerate(self._scenes):
+            col = i % _SCENE_COLS
+            row = i // _SCENE_COLS
+            x   = left + col * col_step
+            y   = _SCENE_TOP_PAD + row * row_step - int(self._scene_scroll_y)
+            if y + _SCENE_SZ < 0 or y > CONTENT_H:
+                continue
+            if scene.pix and not scene.pix.isNull():
+                p.drawPixmap(x, y, scene.pix)
+        p.restore()
 
     def _draw_pager(self, p: QPainter):
         n     = 2
