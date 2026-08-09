@@ -327,7 +327,20 @@ class LightsWidget(QWidget):
     # ── Home Assistant ────────────────────────────────────────────────────────
 
     def _fetch_ha_lights(self):
-        lights = self._ha.get_all_lights()
+        import os, datetime
+        log_dir  = os.path.expanduser("~/.local/share/lights-app")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "debug.log")
+        lights, err = self._ha.get_all_lights()
+        with open(log_path, "a") as f:
+            f.write(
+                f"{datetime.datetime.now().isoformat()} "
+                f"url={_cfg.HA_URL!r} "
+                f"token_set={bool(_cfg.HA_TOKEN)} "
+                f"found={len(lights)} "
+                f"error={err!r} "
+                f"sample={lights[:3]}\n"
+            )
         self._ha_lights_loaded.emit(lights)
 
     def _apply_ha_lights(self, lights: list):

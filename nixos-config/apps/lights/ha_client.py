@@ -37,17 +37,29 @@ class HAClient:
         except (urllib.error.URLError, OSError):
             return False
 
-    def get_all_lights(self) -> list[dict]:
-        """Fetch all light.* entities, sorted by friendly name."""
+    def get_all_lights(self) -> tuple[list[dict], str]:
+        """Fetch all light.* entities, sorted by friendly name.
+
+        Returns (lights, error_msg). error_msg is empty on success.
+        """
         req = urllib.request.Request(
             f"{self._base}/api/states",
             headers=self._headers,
         )
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-                states = json.loads(resp.read())
-        except (urllib.error.URLError, OSError, json.JSONDecodeError):
-            return []
+                raw = resp.read()
+                states = json.loads(raw)
+        except urllib.error.HTTPError as exc:
+            return [], f"HTTP {exc.code} {exc.reason}"
+        except urllib.error.URLError as exc:
+            return [], f"URLError: {exc.reason}"
+        except OSError as exc:
+            return [], f"OSError: {exc}"
+        except json.JSONDecodeError as exc:
+            return [], f"JSONDecodeError: {exc}"
+        if not isinstance(states, list):
+            return [], f"unexpected response type: {type(states).__name__}"
         result = []
         for s in states:
             eid = s.get("entity_id", "")
@@ -55,7 +67,7 @@ class HAClient:
                 fname = s.get("attributes", {}).get("friendly_name", eid)
                 result.append({"entity_id": eid, "friendly_name": fname})
         result.sort(key=lambda x: x["friendly_name"].lower())
-        return result
+        return result, ""
 
     def get_light_brightness_pct(self, entity_id: str) -> float | None:
         state = self.get_state(entity_id)
