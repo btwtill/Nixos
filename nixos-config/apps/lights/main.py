@@ -1,13 +1,16 @@
 from __future__ import annotations
 import sys
 import math
+import threading
 from pathlib import Path
-from PyQt6.QtCore import Qt, QRectF, QPointF, QTimer
+from PyQt6.QtCore import Qt, QRectF, QPointF, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QPainter, QColor, QFont,
     QRadialGradient, QLinearGradient, QPainterPath, QPen, QPixmap,
 )
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget
+import config as _cfg
+import ha_client as _hac
 
 W, H      = 814, 490
 PAGER_H   = 40
@@ -63,17 +66,6 @@ _LIST_H      = 288    # list height
 _LIST_ITEM_H = 73     # item height (matches LightListItemBackdrop)
 _LIST_ITEM_W = 223    # item backdrop width
 _LIST_FADE_H = 90     # top/bottom fade height
-
-# Placeholder HA entity names — replace with real HA entities later
-_HA_LIGHT_NAMES: list[str] = [
-    "AmbientLight 01",
-    "Ceiling Light 01",
-    "Ceiling Light 02",
-    "Corner Light 01",
-    "Floor Lamp",
-    "Table Lamp",
-    "Wall Sconce",
-]
 
 # ── Preset row ─────────────────────────────────────────────────────────────────
 _BTN_PAD = 8
@@ -237,6 +229,8 @@ def _scene_button_pixmap(size: int, name: str, colors: list) -> QPixmap:
 # ── Main widget ────────────────────────────────────────────────────────────────
 
 class LightsWidget(QWidget):
+    _ha_lights_loaded = pyqtSignal(list)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(W, H)
@@ -269,10 +263,31 @@ class LightsWidget(QWidget):
         self._list_scroll_start: float      = 0.0
         self._list_drag_start_y: float | None = None
 
+        # HA state
+        self._ha_lights: list[dict] = []           # {"entity_id": ..., "friendly_name": ...}
+        self._pending_brightness: dict[str, float] = {}
+        self._pending_color: dict[str, tuple[float, float]] = {}
+
         # Animation timer (~60 fps)
         self._anim_timer = QTimer(self)
         self._anim_timer.setInterval(16)
         self._anim_timer.timeout.connect(self._animate)
+
+        # HA client + debounce timers
+        self._ha = _hac.HAClient(_cfg.HA_URL, _cfg.HA_TOKEN)
+        self._ha_lights_loaded.connect(self._apply_ha_lights)
+
+        self._brightness_debounce = QTimer(self)
+        self._brightness_debounce.setSingleShot(True)
+        self._brightness_debounce.setInterval(150)
+        self._brightness_debounce.timeout.connect(self._send_brightness)
+
+        self._color_debounce = QTimer(self)
+        self._color_debounce.setSingleShot(True)
+        self._color_debounce.setInterval(150)
+        self._color_debounce.timeout.connect(self._send_color)
+
+        threading.Thread(target=self._fetch_ha_lights, daemon=True).start()
 
         # Assets
         self._floorplan_pix  = QPixmap(str(ASSETS_DIR / "floorplan.png"))
@@ -308,6 +323,34 @@ class LightsWidget(QWidget):
         self._scene_pixmaps: list[QPixmap] = [
             _scene_button_pixmap(_SQ, name, colors) for name, colors in _SCENES
         ]
+
+    # ── Home Assistant ────────────────────────────────────────────────────────
+
+    def _fetch_ha_lights(self):
+        lights = self._ha.get_all_lights()
+        self._ha_lights_loaded.emit(lights)
+
+    def _apply_ha_lights(self, lights: list):
+        self._ha_lights = lights
+        self.update()
+
+    def _send_brightness(self):
+        pending, self._pending_brightness = self._pending_brightness, {}
+        for eid, v in pending.items():
+            threading.Thread(
+                target=self._ha.set_light_brightness,
+                args=(eid, round(v * 100)),
+                daemon=True,
+            ).start()
+
+    def _send_color(self):
+        pending, self._pending_color = self._pending_color, {}
+        for eid, (hue, sat) in pending.items():
+            threading.Thread(
+                target=self._ha.set_light_color,
+                args=(eid, hue, sat),
+                daemon=True,
+            ).start()
 
     # ── Animation ─────────────────────────────────────────────────────────────
 
@@ -458,14 +501,20 @@ class LightsWidget(QWidget):
             for l in self._lights:
                 if l.selected:
                     l.intensity = v
+                    if l.ha_name:
+                        self._pending_brightness[l.ha_name] = v
             self.update()
+            self._brightness_debounce.start()
         elif self._panel_drag_mode == 'color':
             hue, sat = self._color_from_pos(pos, px)
             for l in self._lights:
                 if l.selected:
                     l.hue = hue
                     l.saturation = sat
+                    if l.ha_name:
+                        self._pending_color[l.ha_name] = (hue, sat)
             self.update()
+            self._color_debounce.start()
 
     # ── Interaction ───────────────────────────────────────────────────────────
 
@@ -532,7 +581,7 @@ class LightsWidget(QWidget):
 
         if self._list_drag_start_y is not None:
             delta    = self._list_drag_start_y - pos.y()
-            max_scr  = max(0.0, len(_HA_LIGHT_NAMES) * _LIST_ITEM_H - _LIST_H)
+            max_scr  = max(0.0, len(self._ha_lights) * _LIST_ITEM_H - _LIST_H)
             self._list_scroll = max(0.0, min(max_scr, self._list_scroll_start + delta))
             self.update()
             return
@@ -574,10 +623,10 @@ class LightsWidget(QWidget):
                 # Tap → assign HA entity to selected lights
                 iy  = pos.y() - (PANEL_Y + _LIST_Y) + self._list_scroll
                 idx = int(iy // _LIST_ITEM_H)
-                if 0 <= idx < len(_HA_LIGHT_NAMES):
+                if 0 <= idx < len(self._ha_lights):
                     for l in self._lights:
                         if l.selected:
-                            l.ha_name = _HA_LIGHT_NAMES[idx]
+                            l.ha_name = self._ha_lights[idx]["entity_id"]
                     self.update()
             self._list_drag_start_y = None
             return
@@ -786,7 +835,7 @@ class LightsWidget(QWidget):
         rw = self._remove_btn_pix.width()  if not self._remove_btn_pix.isNull() else 96
         rh = self._remove_btn_pix.height() if not self._remove_btn_pix.isNull() else 46
         rx = px + (PANEL_W - rw) / 2
-        ry = PANEL_Y + PANEL_H - 40 - rh
+        ry = PANEL_Y + PANEL_H - 16 - rh
         if QRectF(rx, ry, rw, rh).contains(pos):
             self._lights = [l for l in self._lights if not l.selected]
             self._dragging = None
@@ -831,27 +880,23 @@ class LightsWidget(QWidget):
         lp.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
         scroll = self._list_scroll
-        for i, name in enumerate(_HA_LIGHT_NAMES):
+        for i, entry in enumerate(self._ha_lights):
+            eid   = entry["entity_id"]
+            fname = entry.get("friendly_name", eid)
             iy = int(i * _LIST_ITEM_H - scroll)
             if iy + _LIST_ITEM_H < 0 or iy > _LIST_H:
                 continue
-            ix = (_LIST_W - _LIST_ITEM_W) // 2
-            # Backdrop
+            ix     = (_LIST_W - _LIST_ITEM_W) // 2
+            is_sel = ref.ha_name == eid
             if not self._list_item_pix.isNull():
-                is_sel = ref.ha_name == name
-                if is_sel:
-                    lp.setOpacity(1.0)
-                else:
-                    lp.setOpacity(0.55)
+                lp.setOpacity(1.0 if is_sel else 0.55)
                 lp.drawPixmap(ix, iy, self._list_item_pix)
                 lp.setOpacity(1.0)
-            # Name
-            is_sel = ref.ha_name == name
             lp.setPen(QColor(255, 255, 255) if is_sel else QColor(160, 160, 160))
             lp.setFont(QFont("Inter", 14,
                              QFont.Weight.DemiBold if is_sel else QFont.Weight.Normal))
             lp.drawText(QRectF(ix, iy, _LIST_ITEM_W, _LIST_ITEM_H),
-                        Qt.AlignmentFlag.AlignCenter, name)
+                        Qt.AlignmentFlag.AlignCenter, fname)
 
         # Fade mask (DestinationIn keeps alpha where mask is opaque)
         lp.setCompositionMode(
@@ -873,7 +918,7 @@ class LightsWidget(QWidget):
             rw = self._remove_btn_pix.width()
             rh = self._remove_btn_pix.height()
             rx = int(px + (PANEL_W - rw) / 2)
-            ry = PANEL_Y + PANEL_H - 40 - rh
+            ry = PANEL_Y + PANEL_H - 16 - rh
             p.drawPixmap(rx, ry, self._remove_btn_pix)
 
         p.restore()
