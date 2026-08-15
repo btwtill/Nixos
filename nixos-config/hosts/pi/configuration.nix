@@ -112,6 +112,8 @@
     ffmpeg
     (pkgs.callPackage ../../apps/music {})
     (pkgs.callPackage ../../apps/screenshot {})
+    (pkgs.callPackage ../../apps/home {})
+    (pkgs.callPackage ../../apps/lights {})
   ];
 
   programs.thunar.enable = true;
