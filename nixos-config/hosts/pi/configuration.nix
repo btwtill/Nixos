@@ -102,6 +102,7 @@
   environment.systemPackages = with pkgs; [
     python313Packages.qtile
     alacritty
+    picom
     rofi
     unclutter
     nitrogen
