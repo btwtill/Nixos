@@ -250,7 +250,6 @@ class LightsWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(W, H)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self._page         = 0
         self._drag_start_x: float | None = None
@@ -823,9 +822,7 @@ class LightsWidget(QWidget):
         try:
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
             p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-            p.fillRect(self.rect(), Qt.GlobalColor.transparent)
-            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+            p.fillRect(self.rect(), QColor("#1E1E1E"))
 
             if self._page == 0:
                 self._draw_page1(p)
@@ -1229,7 +1226,6 @@ class LightsApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Lights")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCentralWidget(LightsWidget())
         self.setFixedSize(W, H)
 

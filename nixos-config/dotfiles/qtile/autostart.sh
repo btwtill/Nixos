@@ -2,7 +2,9 @@
 
 setxkbmap de
 nitrogen --set-scaled "$HOME/wallpapers/background.jpg"
-picom
+if command -v picom &>/dev/null; then
+  picom &
+fi
 unclutter -idle 1 -root &
 
 # if [ "$(hostname)" = "vm" ]; then

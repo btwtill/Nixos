@@ -25,8 +25,7 @@ class HomeWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(W, H)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setStyleSheet("background: transparent;")
+        self.setStyleSheet("background: #1E1E1E;")
 
         assets = config.ASSETS
 
@@ -186,7 +185,6 @@ class HomeApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Home")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCentralWidget(HomeWidget())
         self.setFixedSize(W, H)
 
