@@ -38,7 +38,6 @@ class LinearSlider(QWidget):
         self._hw, self._hh = handle_size
         self._value = 0.0
 
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(max(self._hh, int(self._track_h)))
         self.setMouseTracking(True)
@@ -81,9 +80,7 @@ class LinearSlider(QWidget):
             QPainter.RenderHint.SmoothPixmapTransform
         )
 
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        p.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        p.fillRect(self.rect(), QColor("#1E1E1E"))
 
         full_w  = float(self.width())
         track_y = (self.height() - self._track_h) / 2

@@ -91,7 +91,6 @@ class ArcSlider(QWidget):
         self._handle_pix = QPixmap(handle_image) if handle_image else QPixmap()
         self._dragging   = False
 
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
 
     # ── public API ────────────────────────────────────────────────────────────
@@ -154,10 +153,7 @@ class ArcSlider(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Clear to transparent first so no stale pixels remain between repaints.
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        p.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        p.fillRect(self.rect(), QColor("#1E1E1E"))
 
         # Backdrop — correct aspect ratio, centered on the circle centre.
         # Scale to fit within the widget without distortion, then position

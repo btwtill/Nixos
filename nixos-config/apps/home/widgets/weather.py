@@ -89,8 +89,6 @@ class WeatherWidget(QWidget):
         self._drag_start_x: float | None = None
         self._drag_scroll_start: float = 0.0
 
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
         self._cycle_timer = QTimer(self)
         self._cycle_timer.setInterval(_METRICS[0][3])
         self._cycle_timer.timeout.connect(self._advance_metric)
@@ -216,9 +214,7 @@ class WeatherWidget(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        p.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        p.fillRect(self.rect(), QColor("#1E1E1E"))
 
         W, H    = self.width(), self.height()
         icon_w  = self._ICON_W

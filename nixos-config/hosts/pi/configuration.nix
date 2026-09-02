@@ -172,8 +172,9 @@
   };
 
   systemd.services.podman-matter-server = {
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
+    after  = [ "network-online.target" "nss-lookup.target" ];
+    wants  = [ "network-online.target" ];
+    serviceConfig.RestartSec = "30s";
   };
 
   # User

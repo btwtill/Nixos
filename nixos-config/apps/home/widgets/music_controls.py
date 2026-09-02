@@ -26,7 +26,7 @@ class MusicControls(QWidget):
 
     def __init__(self, assets: Path, parent=None):
         super().__init__(parent)
-        self.setStyleSheet("background: transparent;")
+        self.setStyleSheet("background: #1E1E1E;")
         self._assets = assets
         self._music  = assets / "music"
         self._cover_placeholder = QPixmap(str(self._music / "MusicCover.png"))
@@ -72,7 +72,7 @@ class MusicControls(QWidget):
         self._cover = QLabel()
         self._cover.setFixedSize(180, 180)
         self._cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cover.setStyleSheet("background: transparent;")
+        self._cover.setStyleSheet("background: #1E1E1E;")
         self._cover.setPixmap(
             self._cover_placeholder.scaled(
                 180, 180,
