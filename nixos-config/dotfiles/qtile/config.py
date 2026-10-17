@@ -164,7 +164,8 @@ startup_layout = [
     ("2", "lights-app"),  # group 2 — lights control UI
     ("3", terminal),      # group 3
     ("4", "music-app"),   # group 4 — music player
-    ("5", terminal)       # group 5 - terminal
+    ("5", terminal),      # group 5 - terminal
+    ("6", "system-app"),  # group 6 — services / resources monitor
 ]
 
 # Named apps get a fixed group regardless of spawn order.
@@ -173,6 +174,7 @@ _NAMED_GROUPS = {
     "Home":   "1",
     "Lights": "2",
     "Music":  "4",
+    "System": "6",
 }
 
 # Unnamed windows (terminals) fill remaining groups in order.
@@ -193,7 +195,8 @@ groups = [
     Group("2", layout="monadtall"),
     Group("3", layout="monadtall"),
     Group("4", layout="monadtall"),
-    Group("5", layout="monadtall")
+    Group("5", layout="monadtall"),
+    Group("6", layout="monadtall"),
 ]
 
 # ----------------------
@@ -280,6 +283,9 @@ screens = [
             [
                 SvgButton(icon("Bluetooth_Button.svg"), icon("Bluetooth_Button_Highlighted.svg"),
                     lazy.spawn("echo bottom"),
+                    icon_width=BTN_W, icon_height=BTN_H),
+                SvgButton(icon("System_Button.svg"), icon("System_Button_Highlighted.svg"),
+                    lazy.group["6"].toscreen(),
                     icon_width=BTN_W, icon_height=BTN_H),
                 widget.Spacer(),
             ],

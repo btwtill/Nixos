@@ -113,6 +113,12 @@
     (pkgs.callPackage ../../apps/home {})
     (pkgs.callPackage ../../apps/lights {})
     (pkgs.callPackage ../../apps/screenshot {})
+    (pkgs.callPackage ../../apps/system {
+      hostLabel = "UTM VM";
+      extraServices = [
+        { unit = "spice-vdagentd.service"; label = "SPICE agent"; }
+      ];
+    })
   ];
 
   programs.thunar.enable = true;

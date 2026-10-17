@@ -114,6 +114,12 @@
     (pkgs.callPackage ../../apps/screenshot {})
     (pkgs.callPackage ../../apps/home {})
     (pkgs.callPackage ../../apps/lights {})
+    (pkgs.callPackage ../../apps/system {
+      hostLabel = "Raspberry Pi 3B+";
+      extraServices = [
+        { unit = "bluetooth.service"; label = "Bluetooth"; }
+      ];
+    })
   ];
 
   programs.thunar.enable = true;
