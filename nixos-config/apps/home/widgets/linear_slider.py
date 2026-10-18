@@ -6,7 +6,7 @@ fills keep the same proportions as the source artwork.
 """
 from __future__ import annotations
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF
-from PyQt6.QtGui import QPainter, QPixmap
+from PyQt6.QtGui import QColor, QPainter, QPixmap
 from PyQt6.QtWidgets import QWidget, QSizePolicy
 
 
