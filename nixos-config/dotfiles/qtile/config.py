@@ -284,7 +284,7 @@ screens = [
                 SvgButton(icon("Bluetooth_Button.svg"), icon("Bluetooth_Button_Highlighted.svg"),
                     lazy.spawn("echo bottom"),
                     icon_width=BTN_W, icon_height=BTN_H),
-                SvgButton(icon("System_Button.svg"), icon("System_Button_Highlighted.svg"),
+                SvgButton(icon("SystemButton.svg"), icon("SystemButtonPushed.svg"),
                     lazy.group["6"].toscreen(),
                     icon_width=BTN_W, icon_height=BTN_H),
                 widget.Spacer(),
