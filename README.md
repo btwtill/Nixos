@@ -12,6 +12,7 @@
 |---|---|
 | VM / running system | `sudo nixos-rebuild switch --flake .#vm` |
 | Pi (on running Pi) | `sudo nixos-rebuild switch --flake .#pi` |
+| Pi 5 (on running Pi 5) | `sudo nixos-rebuild switch --flake .#pi5` |
 | Laptop | `sudo nixos-rebuild switch --flake .#laptop` |
 
 ### Pi SD Images
@@ -24,6 +25,23 @@
 | Print store path, no symlink | `nix build .#piImageFull --no-link --print-out-paths` |
 
 Image file is at: `<result>/sd-image/*.img`
+
+### Pi 5 SD Image
+
+Build on an aarch64-linux machine — the VM. The VM config adds the
+`nixos-raspberrypi` binary cache, so the Pi kernel is downloaded, not compiled
+(rebuild the VM once after pulling this change).
+
+```bash
+# On the VM, in the flake folder
+nix build .#pi5Image
+cp result/sd-image/nixos-image-rpi5-kernel.img /mnt/mac/
+```
+
+Flash it with the macOS steps below, put the card in the Pi 5 and power on.
+First boot grows the root partition to fill the card. Log in as `defaultUser` /
+`password` (SSH: `ssh defaultUser@pi5.local`), then later updates go through
+`sudo nixos-rebuild switch --flake .#pi5` on the Pi itself.
 
 Copy the image to the shared folder — run this **on the VM**, treating the symlink as a regular directory path:
 

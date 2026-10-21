@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 
 setxkbmap de
-nitrogen --set-scaled "$HOME/wallpapers/background.jpg"
+# nitrogen on pi / vm; feh on pi5 (nitrogen was dropped from newer nixpkgs)
+if command -v nitrogen &>/dev/null; then
+  nitrogen --set-scaled "$HOME/wallpapers/background.jpg"
+else
+  feh --bg-scale "$HOME/wallpapers/background.jpg"
+fi
 if command -v picom &>/dev/null; then
   picom &
 fi
