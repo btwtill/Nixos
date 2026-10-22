@@ -15,7 +15,8 @@ ASSETS = Path(__file__).parent / "assets"
 #   ~/.config/home-app/secrets.json
 #   {
 #     "ha_url":   "http://<vm-ip>:8123",
-#     "ha_token": "<long-lived access token, from your HA profile page>"
+#     "ha_token": "<long-lived access token, from your HA profile page>",
+#     "weather_entity": "weather.forecast_home"     (optional)
 #   }
 
 SECRETS_PATH = Path.home() / ".config" / "home-app" / "secrets.json"
@@ -39,8 +40,10 @@ LIGHT_ENTITY = "light.ceiling_lights"   # ← change to your real/demo entity id
 # How often to poll Home Assistant for external state changes (ms).
 HA_POLL_INTERVAL_MS = 3000
 
-# Weather entity (met / weather integration in HA).
-WEATHER_ENTITY = "weather.demo_weather_north"
+# Weather entity (met / weather integration in HA). Met.no creates
+# weather.forecast_home during onboarding; override per device in secrets.json
+# (e.g. "weather.demo_weather_north" for the VM's demo integration).
+WEATHER_ENTITY = _secrets.get("weather_entity", "weather.forecast_home")
 
 # How often to refresh weather data (ms).  60 s is plenty for forecast data.
 WEATHER_POLL_INTERVAL_MS = 60_000
