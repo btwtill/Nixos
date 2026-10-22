@@ -35,7 +35,7 @@ HA_URL   = _secrets.get("ha_url", "http://localhost:8123")
 HA_TOKEN = _secrets.get("ha_token", "")
 
 # Entity controlled by the brightness slider (top-right arc slider).
-LIGHT_ENTITY = "light.ceiling_lights"   # ← change to your real/demo entity id
+LIGHT_ENTITY = "light.h60a6"   # ← change to your real/demo entity id
 
 # How often to poll Home Assistant for external state changes (ms).
 HA_POLL_INTERVAL_MS = 3000
