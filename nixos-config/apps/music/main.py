@@ -1,46 +1,31 @@
 import sys
-from PyQt6.QtCore    import QMetaObject, Qt, Q_ARG, pyqtSlot
+from pathlib import Path
+
+# Shared modules live in apps/common (copied next to this file by default.nix).
+sys.path.append(str(Path(__file__).resolve().parent.parent / "common"))
+
+from PyQt6.QtCore    import pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
-from metadata import MetadataReader, TrackInfo
-from ui       import PlayerWidget
-import controls
+import airplay
+from ui import PlayerWidget
 
 
 class MusicApp(QMainWindow):
+    _track_changed = pyqtSignal(object)   # airplay.TrackInfo, from the watcher thread
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Music")
         self.setMinimumSize(800, 400)
 
         self._player = PlayerWidget()
-        self._player.control_pressed.connect(self._on_control)
+        self._player.control_pressed.connect(airplay.run_action)
         self.setCentralWidget(self._player)
 
-        # Start metadata reader — posts updates back to this thread via Qt
-        self._reader = MetadataReader(self._post_update)
-        self._reader.start()
-
-    # Called from the background thread — must not touch Qt directly
-    def _post_update(self, info: TrackInfo):
-        QMetaObject.invokeMethod(
-            self, "_apply_update",
-            Qt.ConnectionType.QueuedConnection,
-            Q_ARG("PyQt_PyObject", info),
-        )
-
-    @pyqtSlot("PyQt_PyObject")
-    def _apply_update(self, info: TrackInfo):
-        self._player.update_track(info)
-
-    def _on_control(self, action: str):
-        {
-            "play_pause":  controls.play_pause,
-            "next":        controls.next_track,
-            "prev":        controls.prev_track,
-            "volume_up":   controls.volume_up,
-            "volume_down": controls.volume_down,
-        }.get(action, lambda: None)()
+        self._track_changed.connect(self._player.update_track)
+        self._watcher = airplay.AirPlayWatcher(self._track_changed.emit)
+        self._watcher.start()
 
 
 def main():

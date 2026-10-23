@@ -26,6 +26,7 @@ class MusicControls(QWidget):
 
     def __init__(self, assets: Path, parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet("background: #1E1E1E;")
         self._assets = assets
         self._music  = assets / "music"

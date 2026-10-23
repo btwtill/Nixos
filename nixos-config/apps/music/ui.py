@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QSizePolicy,
 )
 
-from metadata import TrackInfo
+from airplay import TrackInfo
 
 # Colours
 BG        = "#1a1a2e"
@@ -57,6 +57,8 @@ class PlayerWidget(QWidget):
         self._title.setText(info.title  or "Nothing playing")
         self._artist.setText(info.artist or "")
         self._album.setText(info.album  or "")
+        self._btn_play.setText("⏸" if info.playing else "▶")
+        self._hint.setVisible(not info.title)
 
         if info.art:
             pix = QPixmap()
@@ -131,7 +133,7 @@ class PlayerWidget(QWidget):
         controls.setSpacing(16)
 
         self._btn_prev  = _Button("⏮")
-        self._btn_play  = _Button("⏸")
+        self._btn_play  = _Button("▶")
         self._btn_next  = _Button("⏭")
         self._btn_vol_d = _Button("🔉")
         self._btn_vol_u = _Button("🔊")

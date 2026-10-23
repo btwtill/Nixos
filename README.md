@@ -117,6 +117,48 @@ podman ps
 podman logs -f matter-server
 ```
 
+### Screenshots
+
+`screenshot` is installed on vm, pi and pi5 (`nixos-config/apps/screenshot`).
+It captures the whole screen and uses `DISPLAY=:0` by default, so it also
+works over SSH.
+
+```bash
+# Save to ~/Pictures/screenshots/<date>_<time>.png (prints the path)
+screenshot
+
+# Save to a specific file
+screenshot ~/Desktop/home-screen.png
+
+# Write PNG to stdout (e.g. pipe it somewhere)
+screenshot - > shot.png
+```
+
+Copy screenshots to the Mac (run on the Mac):
+
+```bash
+# Take a screenshot on the Pi 5 and save it straight to the Mac
+ssh defaultUser@pi5.local screenshot - > pi5.png
+
+# All saved screenshots
+scp 'defaultUser@pi5.local:~/Pictures/screenshots/*.png' .
+```
+
+On the VM you can also save straight into the shared folder:
+`screenshot /mnt/mac/screenshot.png`.
+
+### On-screen Keyboard
+
+`osk` runs as a background service (started by Qtile's autostart) and types
+into whatever text field has focus. Apps call it when a field needs typing —
+the Wi-Fi app does this for passwords.
+
+```bash
+osk show      # show the keyboard (starts the service if needed)
+osk hide
+osk toggle
+```
+
 ### Maintenance
 
 ```bash

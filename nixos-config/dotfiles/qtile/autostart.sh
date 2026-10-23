@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
 setxkbmap de
-# nitrogen on pi / vm; feh on pi5 (nitrogen was dropped from newer nixpkgs)
-if command -v nitrogen &>/dev/null; then
-  nitrogen --set-scaled "$HOME/wallpapers/background.jpg"
-else
-  feh --bg-scale "$HOME/wallpapers/background.jpg"
+# Solid desktop background in the exact UI grey. It shows in the gaps around
+# windows; drawing the wallpaper image there came out one shade darker
+# (#1d1d1d) and showed as a dark frame around the apps.
+xsetroot -solid "#1e1e1e"
+
+# On-screen keyboard service (hidden until an app runs `osk show`)
+if command -v osk &>/dev/null; then
+  osk daemon &
 fi
 if command -v picom &>/dev/null; then
   picom &

@@ -85,13 +85,21 @@
         pipe_name = "/tmp/shairport-sync-metadata";
         pipe_timeout = 5000;
       };
+      # MPRIS on the session bus, where the music and home apps look for it
+      # (play/pause/skip, now-playing + cover for any number of apps).
+      general = {
+        mpris_service_bus = "session";
+        dbus_service_bus  = "session";
+      };
     };
   };
 
   # Run as defaultUser so it can reach the PipeWire session socket
   systemd.services.shairport-sync = {
-    after = [ "pipewire.service" "pipewire-pulse.service" "network-online.target" ];
-    wants = [ "pipewire.service" "pipewire-pulse.service" "network-online.target" ];
+    # pipewire.service is a user unit, so ordering on it does nothing here;
+    # user@1000 is what provides the session bus and PipeWire socket.
+    after = [ "pipewire.service" "pipewire-pulse.service" "network-online.target" "user@1000.service" ];
+    wants = [ "pipewire.service" "pipewire-pulse.service" "network-online.target" "user@1000.service" ];
     serviceConfig = {
       User = lib.mkForce "defaultUser";
       Group = lib.mkForce "users";
@@ -122,6 +130,10 @@
     (pkgs.callPackage ../../apps/screenshot {})
     (pkgs.callPackage ../../apps/home {})
     (pkgs.callPackage ../../apps/lights {})
+    (pkgs.callPackage ../../apps/bluetooth {})
+    (pkgs.callPackage ../../apps/wifi {})
+    (pkgs.callPackage ../../apps/osk {})
+    xsetroot
     (pkgs.callPackage ../../apps/system {
       hostLabel = "Raspberry Pi 5";
       extraServices = [
@@ -198,7 +210,7 @@
   # User
   users.users.defaultUser = {
     isNormalUser = true;
-    extraGroups  = [ "wheel" ];
+    extraGroups  = [ "wheel" "networkmanager" ];   # networkmanager: Wi-Fi app may manage connections
     initialPassword = "password";
   };
 

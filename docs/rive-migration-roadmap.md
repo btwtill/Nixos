@@ -243,7 +243,8 @@ Covers all current functionality, derived from the current PNG/SVG assets.
 - [ ] **Component page**: hidden debug screen listing every component with controls for its properties and a log of events — lets the designer check placeholders and final art.
 - [ ] Small frame-time overlay (fps, median / p95 frame time), off by default. Not used for decisions in the VM, but ready for the Pi 5.
 - [ ] Screens composed at the 1024 × 600 reference size and scaled to the actual window.
-- [ ] Per-host settings from Nix: `homy-core` address, display mode (`window` / `fullscreen`), reference size (default 1024 × 600).
+- [ ] Per-host settings from Nix: `homy-core` address, display mode (`window` / `fullscreen`), reference size (default 1024 × 600), pixel aspect (default `1.0`).
+- [ ] **Pixel-aspect correction:** `homy.display.pixelAspect` (default `1.0` = square pixels, no correction). When set, the UI scales its whole layout horizontally by `1 / pixelAspect` at the top level — nothing else in the UI knows about it. Changing the panel only means changing or removing that one value.
 - [ ] NixOS module (`modules/homy-ui.nix`); on `vm`, a switch to start `homy-ui` instead of the old apps.
 
 **Done when:** the shell with navigation, the component page and all placeholders runs on the VM from the flake.
@@ -292,6 +293,7 @@ NixOS on the Pi 5 needs a community flake (e.g. `nixos-raspberrypi`) for kernel 
 - [ ] Add a Pi 5 SD image build.
 - [ ] Flash and check: boot, Wi-Fi, Bluetooth, audio, AirPlay, HA + Matter, display + touch.
 - [ ] Confirm the real display resolution; update the reference size if it is not 1024 × 600.
+- [ ] Measure the panel's pixel aspect: the current 7" HDMI panel takes 1024 × 600 but reports a 16:9 surface (476 × 268 mm EDID), so the picture is ~4–5 % wider than the pixels. Measure a circle with a ruler (width ÷ height) and set `homy.display.pixelAspect` on `pi5` to that value.
 - [ ] Add `pi5` rows to the README quick reference.
 - [ ] Run as a **test device** with its own fresh HA — the Pi 3B+ keeps running the house.
 

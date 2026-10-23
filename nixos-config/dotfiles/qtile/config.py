@@ -166,6 +166,8 @@ startup_layout = [
     ("4", "music-app"),   # group 4 — music player
     ("5", terminal),      # group 5 - terminal
     ("6", "system-app"),  # group 6 — services / resources monitor
+    ("7", "bluetooth-app"), # group 7 — Bluetooth devices
+    ("8", "wifi-app"),    # group 8 — Wi-Fi networks
 ]
 
 # Named apps get a fixed group regardless of spawn order.
@@ -175,6 +177,8 @@ _NAMED_GROUPS = {
     "Lights": "2",
     "Music":  "4",
     "System": "6",
+    "Bluetooth": "7",
+    "Wi-Fi":  "8",
 }
 
 # Unnamed windows (terminals) fill remaining groups in order.
@@ -197,6 +201,8 @@ groups = [
     Group("4", layout="monadtall"),
     Group("5", layout="monadtall"),
     Group("6", layout="monadtall"),
+    Group("7", layout="monadtall"),
+    Group("8", layout="monadtall"),
 ]
 
 # ----------------------
@@ -275,6 +281,9 @@ screens = [
                     lazy.group["5"].toscreen(),
                     icon_width=375, icon_height=40),
                 widget.Spacer(),
+                SvgButton(icon("WifiButton.svg"), icon("WifiButtonPushed.svg"),
+                    lazy.group["8"].toscreen(),
+                    icon_width=BTN_W, icon_height=BTN_H),
             ],
             BAR_HEIGHT,
             background=colors["bg"],
@@ -282,7 +291,7 @@ screens = [
         bottom=bar.Bar(
             [
                 SvgButton(icon("Bluetooth_Button.svg"), icon("Bluetooth_Button_Highlighted.svg"),
-                    lazy.spawn("echo bottom"),
+                    lazy.group["7"].toscreen(),
                     icon_width=BTN_W, icon_height=BTN_H),
                 SvgButton(icon("SystemButton.svg"), icon("SystemButtonPushed.svg"),
                     lazy.group["6"].toscreen(),
@@ -344,7 +353,11 @@ def autostart():
         import time
         time.sleep(1)
         for _, cmd in startup_layout:
-            subprocess.Popen(shlex.split(cmd))
+            # One missing app (not installed on this host) must not stop the rest.
+            try:
+                subprocess.Popen(shlex.split(cmd))
+            except OSError as e:
+                logger.warning("startup: could not start %s — %s", cmd, e)
             time.sleep(0.25)
 
     threading.Thread(target=_spawn_startup, daemon=True).start()

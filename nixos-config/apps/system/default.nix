@@ -6,7 +6,7 @@
 # user = true checks the unit with `systemctl --user` (e.g. PipeWire).
 , extraServices ? []
 # Our own PyQt apps — detected by their /lib/<name>/main.py command line.
-, apps ? [ "home-app" "lights-app" "music-app" ]
+, apps ? [ "home-app" "lights-app" "music-app" "bluetooth-app" "wifi-app" "osk" ]
 }:
 
 let

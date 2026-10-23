@@ -1,5 +1,10 @@
 import sys
 import threading
+from pathlib import Path
+
+# Shared modules live in apps/common (copied next to this file by default.nix).
+sys.path.append(str(Path(__file__).resolve().parent.parent / "common"))
+
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget
 
@@ -7,6 +12,7 @@ from widgets.arc_slider     import ArcSlider
 from widgets.weather        import WeatherWidget
 from widgets.music_controls import MusicControls
 from ha_client               import HAClient
+import airplay
 import config
 
 # Canvas dimensions (px)
@@ -21,10 +27,14 @@ class HomeWidget(QWidget):
 
     _brightness_polled = pyqtSignal(float)
     _weather_polled    = pyqtSignal(object)   # emits {condition, attrs, forecast}
+    _track_changed     = pyqtSignal(object)   # airplay.TrackInfo
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(W, H)
+        # Without WA_StyledBackground a plain QWidget ignores the stylesheet
+        # background and the window's default (white) shows through gaps.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet("background: #1E1E1E;")
 
         assets = config.ASSETS
@@ -107,6 +117,11 @@ class HomeWidget(QWidget):
         self._weather_timer.start()
         self._poll_weather()
 
+        # AirPlay now-playing (cover + play state) via shairport's MPRIS
+        self._track_changed.connect(self._apply_track)
+        self._airplay = airplay.AirPlayWatcher(self._track_changed.emit)
+        self._airplay.start()
+
     def _on_brightness(self, value: float):
         self._pending_brightness = value
         self._brightness_debounce.start()
@@ -172,8 +187,11 @@ class HomeWidget(QWidget):
         print(f"[temperature] {temp:.1f} °C")
 
     def _on_music_ctrl(self, action: str):
-        # TODO: forward to controls module (same dbus calls as the music app)
-        print(f"[music]       {action}")
+        airplay.run_action(action)
+
+    def _apply_track(self, info: airplay.TrackInfo):
+        self._music.update_cover(info.art)
+        self._music.set_playing(info.playing)
 
     def _on_seek(self, t: float):
         # TODO: seek track
