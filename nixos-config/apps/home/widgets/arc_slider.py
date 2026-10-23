@@ -66,6 +66,7 @@ class ArcSlider(QWidget):
         handle_image: str = "",
         handle_size: tuple = (26, 26),
         bg_offset: tuple = (0, 0),
+        touch_tolerance: float = 18.0,
         parent=None,
     ):
         super().__init__(parent)
@@ -79,6 +80,7 @@ class ArcSlider(QWidget):
         self._tc      = QColor(track_color) if track_color else None
         self._value   = 0.0
         self._hw, self._hh = handle_size
+        self._tol     = float(touch_tolerance)
 
         if fill_color is None or isinstance(fill_color, str):
             self._fill_solid = QColor(fill_color or "#888888")
@@ -263,13 +265,31 @@ class ArcSlider(QWidget):
 
     # ── interaction ───────────────────────────────────────────────────────────
 
+    def _hits(self, pos: QPointF) -> bool:
+        """A press only grabs the slider on the handle, or on the ring itself:
+        within touch_tolerance px of the track and inside the arc (plus the same
+        margin past either end). Presses elsewhere in the widget are ignored."""
+        handle = self._to_point(self._angle_at(self._value))
+        if math.hypot(pos.x() - handle.x(), pos.y() - handle.y()) <= max(self._hw, self._hh) / 2:
+            return True
+        dx, dy = pos.x() - self._cx, pos.y() - self._cy
+        if abs(math.hypot(dx, dy) - self._radius) > self._tw / 2 + self._tol:
+            return False
+        angle = math.degrees(math.atan2(dx, -dy)) % 360
+        start = self._start % 360
+        rel = (angle - start) % 360 if self._cw else (start - angle) % 360
+        margin = math.degrees(self._tol / self._radius)
+        return rel <= self._span() + margin or rel >= 360 - margin
+
     def mousePressEvent(self, ev):
-        if ev.button() == Qt.MouseButton.LeftButton:
+        if ev.button() == Qt.MouseButton.LeftButton and self._hits(ev.position()):
             self._dragging = True
             self._set_from_pos(ev.position())
+        else:
+            ev.ignore()
 
     def mouseMoveEvent(self, ev):
-        if ev.buttons() & Qt.MouseButton.LeftButton:
+        if self._dragging:
             self._set_from_pos(ev.position())
 
     def mouseReleaseEvent(self, ev):

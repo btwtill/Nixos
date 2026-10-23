@@ -58,6 +58,7 @@ class HomeWidget(QWidget):
             handle_image = str(assets / ls.handle_image) if ls.handle_image else "",
             handle_size  = ls.handle_size,
             bg_offset    = ls.bg_offset,
+            touch_tolerance = ls.touch_tolerance,
             parent=self,
         )
         self._light_sl.setGeometry(LEFT_W, 0, RIGHT_W, ROW_H)
@@ -81,6 +82,7 @@ class HomeWidget(QWidget):
             handle_image = str(assets / ts.handle_image) if ts.handle_image else "",
             handle_size  = ts.handle_size,
             bg_offset    = ts.bg_offset,
+            touch_tolerance = ts.touch_tolerance,
             parent=self,
         )
         self._temp_sl.setGeometry(LEFT_W, ROW_H, RIGHT_W, ROW_H)

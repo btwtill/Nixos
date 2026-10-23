@@ -116,6 +116,9 @@ class ArcSliderConfig:
     handle_size: tuple[int, int] = (26, 26)
     clockwise: bool = True
     bg_offset: tuple[int, int] = (0, 0)   # (dx, dy) applied to the backdrop image
+    # How far (px) beside the ring track a press still grabs the slider.
+    # Smaller = the user has to hit the ring more precisely.
+    touch_tolerance: float = 18.0
 
 
 LIGHT_SLIDER = ArcSliderConfig(

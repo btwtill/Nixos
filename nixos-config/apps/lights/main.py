@@ -49,6 +49,8 @@ _ARC_CX       = PANEL_W // 2   # 171
 _ARC_CY       = PANEL_H // 4   # 111
 _ARC_R        = 85.0           # radius
 _ARC_TW       = 10.0           # track width (for hit detection)
+_ARC_TOUCH_TOL = 18.0          # px beside the track a press still grabs the ring
+                               # (same as touch_tolerance in the home app)
 _ARC_QT_START = 335.0          # (-25) % 360 — start in screen-angle space
 _ARC_SPAN     = 275.0          # CCW sweep in degrees
 
@@ -573,8 +575,13 @@ class LightsWidget(QWidget):
         dx = pos.x() - (px + _ARC_CX)
         dy = pos.y() - (PANEL_Y + _ARC_CY)
         dist = math.sqrt(dx * dx + dy * dy)
-        if abs(dist - _ARC_R) < _ARC_TW * 2 + 14:
-            return 'arc'
+        if abs(dist - _ARC_R) <= _ARC_TW / 2 + _ARC_TOUCH_TOL:
+            # Only on the arc itself (plus a small margin past each end),
+            # not in the gap.
+            rel = (_ARC_QT_START - math.degrees(math.atan2(dx, -dy)) % 360) % 360
+            margin = math.degrees(_ARC_TOUCH_TOL / _ARC_R)
+            if rel <= _ARC_SPAN + margin or rel >= 360 - margin:
+                return 'arc'
         # Color wheel disc
         dx2 = pos.x() - (px + _COLOR_CX)
         dy2 = pos.y() - (PANEL_Y + _COLOR_CY)
