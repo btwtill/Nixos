@@ -147,6 +147,28 @@ scp 'defaultUser@pi5.local:~/Pictures/screenshots/*.png' .
 On the VM you can also save straight into the shared folder:
 `screenshot /mnt/mac/screenshot.png`.
 
+### App Menu & Installing Apps
+
+The top menu button opens the app menu (group 9). Every app started there gets
+its own view; the menu button brings you back. Apps can be added **without a
+system rebuild** — each app is a folder with a `manifest.json`
+(format: `nixos-config/apps/launcher/registry.py`, example:
+`nixos-config/apps/launcher/examples/hello`).
+
+```bash
+# Sideload a folder or git repo (Python apps use "homy-python" in "exec")
+homy-apps install ~/Nixos/nixos-config/apps/launcher/examples/hello
+homy-apps install https://github.com/<you>/<app>.git
+homy-apps list
+homy-apps remove hello
+
+# Or as a Nix package in your user profile (survives rebuilds, can roll back)
+nix profile install ~/Nixos/nixos-config#homy-hello
+nix profile remove homy-app-hello
+```
+
+New apps show up in the menu within a few seconds.
+
 ### On-screen Keyboard
 
 `osk` runs as a background service (started by Qtile's autostart) and types

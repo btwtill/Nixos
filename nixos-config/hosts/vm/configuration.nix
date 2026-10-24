@@ -123,6 +123,7 @@
     (pkgs.callPackage ../../apps/bluetooth {})
     (pkgs.callPackage ../../apps/wifi {})
     (pkgs.callPackage ../../apps/osk {})
+    (pkgs.callPackage ../../apps/launcher {})
     xsetroot
     (pkgs.callPackage ../../apps/screenshot {})
     (pkgs.callPackage ../../apps/system {
@@ -134,6 +135,10 @@
   ];
 
   programs.thunar.enable = true;
+
+  # Launcher apps declared in Nix put a manifest under share/homy/apps;
+  # link that into /run/current-system/sw so the app menu finds them.
+  environment.pathsToLink = [ "/share/homy" ];
 
   # -------------------------------------------------------
   # Home Assistant

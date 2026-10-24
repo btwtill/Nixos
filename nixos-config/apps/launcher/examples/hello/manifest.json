@@ -1,0 +1,7 @@
+{
+  "id": "hello",
+  "name": "Hello",
+  "exec": "homy-python main.py",
+  "icon": "icon.svg",
+  "category": "Other"
+}

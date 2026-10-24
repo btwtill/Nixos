@@ -1,4 +1,4 @@
-from libqtile import bar, layout, widget, hook      #type: ignore
+from libqtile import bar, layout, widget, hook, qtile      #type: ignore
 from libqtile.config import Group, Screen, Key  #type: ignore
 from libqtile.lazy import lazy  #type: ignore
 from libqtile.utils import guess_terminal  #type: ignore
@@ -168,6 +168,7 @@ startup_layout = [
     ("6", "system-app"),  # group 6 — services / resources monitor
     ("7", "bluetooth-app"), # group 7 — Bluetooth devices
     ("8", "wifi-app"),    # group 8 — Wi-Fi networks
+    ("9", "homy-launcher"), # group 9 — app menu (top menu button)
 ]
 
 # Named apps get a fixed group regardless of spawn order.
@@ -179,13 +180,53 @@ _NAMED_GROUPS = {
     "System": "6",
     "Bluetooth": "7",
     "Wi-Fi":  "8",
+    "Apps":   "9",
 }
 
 # Unnamed windows (terminals) fill remaining groups in order.
 _startup_queue = deque(["3", "5"])
 
+# ----------------------
+# Launcher apps — every app started from the app menu gets its own group
+# "app:<id>", created when its window appears and removed when it closes.
+# The launcher starts apps with HOMY_APP_ID set; it's read from /proc.
+# ----------------------
+LAUNCHER_GROUP = "9"
+
+def _homy_app_id(client):
+    try:
+        with open(f"/proc/{client.get_pid()}/environ", "rb") as f:
+            for var in f.read().split(b"\0"):
+                if var.startswith(b"HOMY_APP_ID="):
+                    return var.split(b"=", 1)[1].decode()
+    except Exception:
+        pass
+    return None
+
+@hook.subscribe.client_killed
+def remove_empty_app_group(client):
+    group = client.group
+    if group is None or not group.name.startswith("app:"):
+        return
+
+    def cleanup():
+        g = qtile.groups_map.get(group.name)
+        if g is not None and not g.windows:
+            if qtile.current_group is g:
+                qtile.groups_map[LAUNCHER_GROUP].toscreen()   # back to the app menu
+            qtile.delete_group(g.name)
+
+    qtile.call_later(0.2, cleanup)
+
 @hook.subscribe.client_new
 def assign_startup_group(client):
+    app_id = _homy_app_id(client)
+    if app_id:
+        name = f"app:{app_id}"
+        qtile.add_group(name, layout="monadtall")   # no-op if it already exists
+        client.togroup(name)
+        qtile.groups_map[name].toscreen()
+        return
     if client.name in _NAMED_GROUPS:
         client.togroup(_NAMED_GROUPS[client.name])
     elif _startup_queue:
@@ -203,6 +244,7 @@ groups = [
     Group("6", layout="monadtall"),
     Group("7", layout="monadtall"),
     Group("8", layout="monadtall"),
+    Group("9", layout="monadtall"),
 ]
 
 # ----------------------
@@ -278,7 +320,7 @@ screens = [
                     icon_width=BTN_W, icon_height=BTN_H),
                 widget.Spacer(),
                 SvgButton(icon("Menu_Button.svg"), icon("Menu_Button_Highlighted.svg"),
-                    lazy.group["5"].toscreen(),
+                    lazy.group[LAUNCHER_GROUP].toscreen(),
                     icon_width=375, icon_height=40),
                 widget.Spacer(),
                 SvgButton(icon("WifiButton.svg"), icon("WifiButtonPushed.svg"),

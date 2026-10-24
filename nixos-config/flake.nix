@@ -154,6 +154,13 @@
       # Raspberry Pi 5 image — full config baked in, ready to flash and boot.
       # Build (on an aarch64-linux machine, e.g. the VM): nix build .#pi5Image
       pi5Image = pi5.config.system.build.sdImage;
+
+      # Example launcher app, installable per user without a rebuild:
+      #   nix profile install .#homy-hello   /   nix profile remove homy-app-hello
+      homy-hello = import ./apps/launcher/mk-homy-app.nix {
+        pkgs = nixpkgs.legacyPackages.aarch64-linux;
+        src  = ./apps/launcher/examples/hello;
+      };
     };
   };
 }
