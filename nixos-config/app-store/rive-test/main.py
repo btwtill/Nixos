@@ -55,6 +55,22 @@ SAMPLE_SHA256 = "RrslDN4LAiOhX63awz0I+gDUtqzrwuToJzka4BE3aKM="
 # point of this test is to see real GPU performance. (QtWebEngine reads this.)
 CHROMIUM_FLAGS = ["--ignore-gpu-blocklist", "--enable-gpu-rasterization"]
 
+# Kernel drivers of real GPUs whose rendered frames QtWebEngine can share with
+# Qt (dma_buf). VMs (virtio_gpu, …) can't, which leaves the window empty.
+REAL_GPU_DRIVERS = {"v3d", "i915", "xe", "amdgpu", "radeon", "msm", "panfrost", "lima", "etnaviv"}
+
+
+def web_gpu_enabled() -> bool:
+    """GPU rendering for QtWebEngine? HOMY_WEB_GPU=1/0 forces it; otherwise on
+    only when a real GPU render node is present (Pi 5: v3d)."""
+    forced = os.environ.get("HOMY_WEB_GPU")
+    if forced in ("0", "1"):
+        return forced == "1"
+    for node in Path("/sys/class/drm").glob("renderD*"):
+        if (node / "device" / "driver").resolve().name in REAL_GPU_DRIVERS:
+            return True
+    return False
+
 
 def log(msg: str):
     print(f"[rive-test] {msg}", flush=True)
@@ -156,7 +172,24 @@ _chromium: subprocess.Popen | None = None
 
 
 def run_webengine(url: str):
-    os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", " ".join(CHROMIUM_FLAGS))
+    # How Chromium's frames reach the Qt window (see QtWebEngine's
+    # rhi_gpu_info.cpp / native_skia_output_device_opengl.cpp):
+    #  - GPU: rendered on the GPU and shared as dma_buf. Needs Qt on OpenGL
+    #    *via EGL* (GLX can't import dma_buf) and Chromium kept off Vulkan.
+    #  - software: Chromium composites on the CPU and hands Qt plain pixels —
+    #    always works, used where there's no real GPU (the VM).
+    gpu = web_gpu_enabled()
+    flags = list(CHROMIUM_FLAGS)
+    if gpu:
+        os.environ.setdefault("QSG_RHI_BACKEND", "opengl")
+        os.environ.setdefault("QT_XCB_GL_INTEGRATION", "xcb_egl")
+        flags.append("--disable-features=Vulkan")
+    else:
+        flags += ["--disable-gpu", "--enable-unsafe-swiftshader"]
+    os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", " ".join(flags))
+    url += "&gpu=" + ("on" if gpu else "off")
+    log(f"QtWebEngine rendering: {'GPU' if gpu else 'software (no real GPU found)'}"
+        f" — QTWEBENGINE_CHROMIUM_FLAGS={os.environ['QTWEBENGINE_CHROMIUM_FLAGS']}")
     from PyQt6.QtCore import Qt, QUrl
     from PyQt6.QtWebEngineCore import QWebEnginePage
     from PyQt6.QtWebEngineWidgets import QWebEngineView

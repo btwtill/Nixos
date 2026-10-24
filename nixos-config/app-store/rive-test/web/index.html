@@ -30,7 +30,11 @@
 <div id="err"></div>
 <script>
 const params   = new URLSearchParams(location.search);
-const renderer = params.get("renderer") === "canvas" ? "canvas" : "webgl2";
+// WebGL2 renderer only where WebGL2 actually exists (not in software mode
+// without SwiftShader); otherwise the Canvas renderer.
+const hasWebGL2 = !!document.createElement("canvas").getContext("webgl2");
+const renderer = params.get("renderer") === "canvas" || !hasWebGL2 ? "canvas" : "webgl2";
+const gpuMode  = params.get("gpu") ? ` · gpu ${params.get("gpu")}` : "";
 const fitName  = params.get("fit") || "contain";
 const engine   = params.get("engine") || "browser";
 const canvas   = document.getElementById("c");
@@ -67,7 +71,7 @@ let frames = 0, last = performance.now();
 
 function drawHud() {
   document.getElementById("stats").textContent =
-    `${fps.toFixed(0)} fps · ${renderer} · ${engine}\n${fileInfo}\nGPU: ${gpu}`;
+    `${fps.toFixed(0)} fps · ${renderer} · ${engine}${gpuMode}\n${fileInfo}\nGPU: ${gpu}`;
 }
 const swRenderer = document.getElementById("sw-renderer");
 const swEngine   = document.getElementById("sw-engine");

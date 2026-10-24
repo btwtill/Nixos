@@ -12,6 +12,7 @@ import os
 import shlex
 import subprocess
 import sys
+from pathlib import Path
 
 from PyQt6.QtCore import QFileSystemWatcher, QPointF, QRectF, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QPainter, QPixmap
@@ -23,6 +24,7 @@ from PyQt6.QtWidgets import (
 import registry
 
 W, H = 814, 490
+LOG_DIR = Path.home() / ".local" / "state" / "homy" / "logs"   # one <id>.log per app
 COLS, ROWS = 4, 2
 TILE_W, TILE_H = 150, 150
 ICON = 96
@@ -306,8 +308,11 @@ class Launcher(QWidget):
         if app.background:
             env["HOMY_APP_BACKGROUND"] = "1"      # Qtile won't pause it while hidden
         try:
-            self._procs[app.id] = subprocess.Popen(
-                shlex.split(app.exec), cwd=app.dir, env=env, start_new_session=True)
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+            with open(LOG_DIR / f"{app.id}.log", "w") as log:    # fresh log per start
+                self._procs[app.id] = subprocess.Popen(
+                    shlex.split(app.exec), cwd=app.dir, env=env, start_new_session=True,
+                    stdout=log, stderr=subprocess.STDOUT)
             self._status.setText("")
         except OSError as e:
             self._status.setText(f"Could not start {app.name}: {e.strerror or e}")
