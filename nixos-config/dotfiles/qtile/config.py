@@ -11,6 +11,7 @@ import threading
 import shlex
 import io
 import os
+import signal
 
 import socket
 _hostname = socket.gethostname()
@@ -193,15 +194,93 @@ _startup_queue = deque(["3", "5"])
 # ----------------------
 LAUNCHER_GROUP = "9"
 
-def _homy_app_id(client):
+def _app_env(client) -> dict:
+    """HOMY_* variables of the process that owns the window."""
     try:
         with open(f"/proc/{client.get_pid()}/environ", "rb") as f:
-            for var in f.read().split(b"\0"):
-                if var.startswith(b"HOMY_APP_ID="):
-                    return var.split(b"=", 1)[1].decode()
+            pairs = (v.split(b"=", 1) for v in f.read().split(b"\0") if v.startswith(b"HOMY_"))
+            return {k.decode(): val.decode() for k, val in pairs}
     except Exception:
-        pass
-    return None
+        return {}
+
+def _homy_app_id(client):
+    return _app_env(client).get("HOMY_APP_ID")
+
+def _to_app_group(client, app_id):
+    name = f"app:{app_id}"
+    qtile.add_group(name, layout="monadtall")   # no-op if it already exists
+    client.togroup(name)
+    return qtile.groups_map[name]
+
+# ----------------------
+# Pause hidden launcher apps — while an app's group is off screen its whole
+# process tree is frozen (SIGSTOP: no CPU, no GPU, no rendering) and resumed
+# (SIGCONT) when it's shown again. Apps that must keep working in the
+# background set "background": true in their manifest (HOMY_APP_BACKGROUND=1).
+# ----------------------
+_paused: dict = {}   # group name -> pids we stopped
+
+def _process_tree(root: int) -> list:
+    children: dict = {}
+    for entry in os.listdir("/proc"):
+        if entry.isdigit():
+            try:
+                with open(f"/proc/{entry}/stat") as f:
+                    ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+                children.setdefault(ppid, []).append(int(entry))
+            except (OSError, ValueError, IndexError):
+                pass
+    tree, todo = [], [root]
+    while todo:
+        pid = todo.pop()
+        tree.append(pid)
+        todo.extend(children.get(pid, []))
+    return tree
+
+def _signal_all(pids, sig):
+    for pid in pids:
+        try:
+            os.kill(pid, sig)
+        except OSError:
+            pass
+
+def _set_paused(group, paused: bool):
+    if not paused:
+        _signal_all(_paused.pop(group.name, []), signal.SIGCONT)
+        return
+    if group.name in _paused or not group.windows:
+        return
+    if any(_app_env(w).get("HOMY_APP_BACKGROUND") == "1" for w in group.windows):
+        return
+    pids = []
+    for w in group.windows:
+        try:
+            pids += _process_tree(w.get_pid())
+        except Exception:
+            pass
+    _signal_all(pids, signal.SIGSTOP)
+    _paused[group.name] = pids
+    logger.warning("homy: paused %s (%d processes)", group.name, len(pids))
+
+@hook.subscribe.startup
+def resume_all_apps():
+    """After a Qtile restart the list of paused apps is gone — wake every
+    launcher app so nothing stays frozen."""
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/environ", "rb") as f:
+                if b"HOMY_APP_ID=" in f.read():
+                    _signal_all(_process_tree(int(entry)), signal.SIGCONT)
+        except OSError:
+            pass
+
+@hook.subscribe.setgroup
+def pause_hidden_apps():
+    for g in list(qtile.groups):
+        if g.name.startswith("app:"):
+            _set_paused(g, paused=g.screen is None)
 
 @hook.subscribe.client_killed
 def remove_empty_app_group(client):
@@ -212,20 +291,31 @@ def remove_empty_app_group(client):
     def cleanup():
         g = qtile.groups_map.get(group.name)
         if g is not None and not g.windows:
+            _signal_all(_paused.pop(g.name, []), signal.SIGCONT)
             if qtile.current_group is g:
                 qtile.groups_map[LAUNCHER_GROUP].toscreen()   # back to the app menu
             qtile.delete_group(g.name)
 
     qtile.call_later(0.2, cleanup)
 
+def _show_launcher(qtile):
+    """Menu button. Safety net first: an app window sitting in the menu's own
+    group (it missed its app group) would cover the menu — move it out."""
+    launcher = qtile.groups_map[LAUNCHER_GROUP]
+    for w in list(launcher.windows):
+        app_id = _homy_app_id(w)
+        if app_id:
+            logger.warning("homy: moving %r out of the app menu into app:%s", w.name, app_id)
+            _to_app_group(w, app_id)
+    launcher.toscreen()
+
 @hook.subscribe.client_new
 def assign_startup_group(client):
     app_id = _homy_app_id(client)
     if app_id:
-        name = f"app:{app_id}"
-        qtile.add_group(name, layout="monadtall")   # no-op if it already exists
-        client.togroup(name)
-        qtile.groups_map[name].toscreen()
+        group = _to_app_group(client, app_id)
+        group.toscreen()
+        logger.warning("homy: %r (pid %s) -> %s", client.name, client.get_pid(), group.name)
         return
     if client.name in _NAMED_GROUPS:
         client.togroup(_NAMED_GROUPS[client.name])
@@ -320,7 +410,7 @@ screens = [
                     icon_width=BTN_W, icon_height=BTN_H),
                 widget.Spacer(),
                 SvgButton(icon("Menu_Button.svg"), icon("Menu_Button_Highlighted.svg"),
-                    lazy.group[LAUNCHER_GROUP].toscreen(),
+                    lazy.function(_show_launcher),
                     icon_width=375, icon_height=40),
                 widget.Spacer(),
                 SvgButton(icon("WifiButton.svg"), icon("WifiButtonPushed.svg"),

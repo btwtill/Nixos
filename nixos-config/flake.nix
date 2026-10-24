@@ -159,7 +159,7 @@
       #   nix profile install .#homy-hello   /   nix profile remove homy-app-hello
       homy-hello = import ./apps/launcher/mk-homy-app.nix {
         pkgs = nixpkgs.legacyPackages.aarch64-linux;
-        src  = ./apps/launcher/examples/hello;
+        src  = ./app-store/hello;
       };
     };
   };

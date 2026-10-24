@@ -124,7 +124,6 @@
     (pkgs.callPackage ../../apps/wifi {})
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
-    (pkgs.callPackage ../../apps/rive-test {})   # Rive web-runtime prototype (app menu)
     xsetroot
     (pkgs.callPackage ../../apps/screenshot {})
     (pkgs.callPackage ../../apps/system {

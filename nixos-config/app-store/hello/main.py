@@ -1,6 +1,6 @@
 """Example launcher app — copy this folder as a starting point for your own.
 
-Install it without rebuilding:   homy-apps install <this folder>
+Install it without rebuilding:   homy-apps install ~/Nixos/nixos-config/app-store/hello
 """
 import sys
 

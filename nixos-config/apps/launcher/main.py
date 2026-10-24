@@ -3,6 +3,7 @@
 Tapping an app starts it with HOMY_APP_ID set; Qtile's config spots that
 variable on the new window and gives the app its own group ("app:<id>").
 Tapping an app that is already running switches to its group instead.
+While an app's group is hidden, Qtile pauses it (see dotfiles/qtile/config.py).
 """
 from __future__ import annotations
 
@@ -302,6 +303,8 @@ class Launcher(QWidget):
             subprocess.Popen(["qtile", "cmd-obj", "-o", "group", f"app:{app.id}", "-f", "toscreen"])
             return
         env = dict(os.environ, HOMY_APP_ID=app.id)
+        if app.background:
+            env["HOMY_APP_BACKGROUND"] = "1"      # Qtile won't pause it while hidden
         try:
             self._procs[app.id] = subprocess.Popen(
                 shlex.split(app.exec), cwd=app.dir, env=env, start_new_session=True)

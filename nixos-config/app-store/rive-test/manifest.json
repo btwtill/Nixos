@@ -1,0 +1,6 @@
+{
+  "id": "rive-test",
+  "name": "Rive Test",
+  "exec": "homy-python main.py",
+  "category": "System"
+}

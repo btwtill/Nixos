@@ -152,12 +152,18 @@ On the VM you can also save straight into the shared folder:
 The top menu button opens the app menu (group 9). Every app started there gets
 its own view; the menu button brings you back. Apps can be added **without a
 system rebuild** — each app is a folder with a `manifest.json`
-(format: `nixos-config/apps/launcher/registry.py`, example:
-`nixos-config/apps/launcher/examples/hello`).
+(format: `nixos-config/apps/launcher/registry.py`). Ready-made apps live in
+`nixos-config/app-store/` — nothing there is installed until you install it:
+
+| App | What it is |
+|---|---|
+| `hello` | Minimal example — copy it to start a new app |
+| `rive-test` | Rive prototype: plays a `.riv` (from `~/rive/`) with Rive's web runtime in QtWebEngine or Chromium, with FPS/GPU overlay |
 
 ```bash
 # Sideload a folder or git repo (Python apps use "homy-python" in "exec")
-homy-apps install ~/Nixos/nixos-config/apps/launcher/examples/hello
+homy-apps install ~/Nixos/nixos-config/app-store/hello
+homy-apps install ~/Nixos/nixos-config/app-store/rive-test
 homy-apps install https://github.com/<you>/<app>.git
 homy-apps list
 homy-apps remove hello
@@ -168,6 +174,10 @@ nix profile remove homy-app-hello
 ```
 
 New apps show up in the menu within a few seconds.
+
+Apps you're not looking at are **paused** (frozen, no CPU/GPU) and resume when
+you switch back. An app that must keep working in the background (e.g. audio)
+sets `"background": true` in its `manifest.json`.
 
 ### On-screen Keyboard
 

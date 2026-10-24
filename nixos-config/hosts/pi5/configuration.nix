@@ -134,8 +134,7 @@
     (pkgs.callPackage ../../apps/wifi {})
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
-    chromium
-    (pkgs.callPackage ../../apps/rive-test {})   # Rive web-runtime prototype (app menu)
+    chromium   # for web/Rive apps from the app store (e.g. app-store/rive-test)
     xsetroot
     (pkgs.callPackage ../../apps/system {
       hostLabel = "Raspberry Pi 5";

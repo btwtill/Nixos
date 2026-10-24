@@ -6,7 +6,9 @@
       "name":     "Hello",                  # shown under the icon
       "exec":     "homy-python main.py",    # run from the app folder
       "icon":     "icon.svg",               # optional, relative to the folder
-      "category": "Media"                   # optional: House / Media / System / …
+      "category": "Media",                  # optional: House / Media / System / …
+      "background": false                   # optional: true = keep running while
+                                            # hidden (otherwise it's paused)
     }
 
 Apps are looked up in three places (later ones win on duplicate ids):
@@ -42,6 +44,7 @@ class App:
     category: str
     source: str        # system / nix-profile / sideloaded
     dir: str           # folder the app is started in
+    background: bool = False   # keep running while hidden (not paused by Qtile)
 
 
 def load_manifest(folder: Path, source: str) -> App | None:
@@ -61,6 +64,7 @@ def load_manifest(folder: Path, source: str) -> App | None:
         category=str(data.get("category") or "Other"),
         source=source,
         dir=str(folder.resolve()),
+        background=data.get("background") is True,
     )
 
 

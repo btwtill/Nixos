@@ -16,15 +16,17 @@
                font-family: sans-serif; user-select: none; }
   canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
   #hud { position: fixed; top: 8px; left: 8px; padding: 6px 10px; border-radius: 8px;
-         background: rgba(0, 0, 0, .55); color: #EAEAEA; font-size: 12px; line-height: 1.5;
-         white-space: pre; pointer-events: auto; }
+         background: rgba(0, 0, 0, .55); color: #EAEAEA; font-size: 12px; line-height: 1.5; }
+  #stats { white-space: pre; }
+  #hud .sw { display: inline-block; margin: 6px 6px 0 0; padding: 4px 10px; border-radius: 12px;
+             background: #333; color: #3DAEE9; }
   #err { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
          color: #E05555; font-size: 15px; text-align: center; padding: 24px; white-space: pre-wrap; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="hud">loading…</div>
+<div id="hud"><div id="stats">loading…</div><span class="sw" id="sw-renderer"></span><span class="sw" id="sw-engine"></span></div>
 <div id="err"></div>
 <script>
 const params   = new URLSearchParams(location.search);
@@ -64,13 +66,23 @@ let frames = 0, last = performance.now();
 })(last);
 
 function drawHud() {
-  hud.textContent = `${fps.toFixed(0)} fps · ${renderer} · ${engine}\n${fileInfo}\nGPU: ${gpu}\n(tap here: switch renderer)`;
+  document.getElementById("stats").textContent =
+    `${fps.toFixed(0)} fps · ${renderer} · ${engine}\n${fileInfo}\nGPU: ${gpu}`;
 }
+const swRenderer = document.getElementById("sw-renderer");
+const swEngine   = document.getElementById("sw-engine");
+swRenderer.textContent = `renderer: ${renderer} ⇄`;
+swEngine.textContent   = `engine: ${engine} ⇄`;
 
-// Tap the overlay to reload with the other renderer.
-hud.addEventListener("click", () => {
+// Renderer: just reload the page with the other runtime.
+swRenderer.addEventListener("click", () => {
   params.set("renderer", renderer === "webgl2" ? "canvas" : "webgl2");
   location.search = params.toString();
+});
+// Engine: main.py restarts the app in the other host (QtWebEngine ⇄ Chromium).
+swEngine.addEventListener("click", () => {
+  swEngine.textContent = "switching…";
+  fetch(`switch-engine?renderer=${renderer}`);
 });
 
 function loadScript(src) {
@@ -122,7 +134,8 @@ loadScript(`vendor/${renderer}/rive.js`).then(() => {
   // (Rive listeners); files without one play their first animation instead.
   const probe = new rive.Rive({
     src: "file.riv", canvas, autoplay: false,
-    onLoadError: () => showError("Could not load the .riv file."),
+    onLoadError: () => showError(`Could not load "${params.get("name") || "file.riv"}".\n\n`
+                                 + "Copy a .riv file into ~/rive/ and restart the app."),
     onLoad: () => {
       const machines = probe.stateMachineNames, anims = probe.animationNames;
       probe.cleanup();
@@ -143,7 +156,8 @@ loadScript(`vendor/${renderer}/rive.js`).then(() => {
       r.on(rive.EventType.RiveEvent, e => emit("event", e.data));
     },
   });
-}).catch(e => showError(String(e)));
+}).catch(() => showError("The Rive runtime isn't available.\n\nIt is downloaded on the first start, which needs internet — "
+                          + "check the network and restart the app (details in its log)."));
 
 window.addEventListener("resize", () => r && r.resizeDrawingSurfaceToCanvas());
 </script>
