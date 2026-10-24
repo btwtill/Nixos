@@ -13,7 +13,9 @@ fi
 if command -v picom &>/dev/null; then
   picom &
 fi
-unclutter -idle 1 -root &
+# Touch panel: hide the cursor the moment the screen is touched, start hidden,
+# and otherwise hide it 0.1 s after the mouse stops (fractions of a second work).
+unclutter --timeout 0.1 --hide-on-touch --start-hidden &
 
 # if [ "$(hostname)" = "vm" ]; then
 #   xrandr --output Virtual-1 --mode 1360x768

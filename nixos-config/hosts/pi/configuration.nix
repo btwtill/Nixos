@@ -111,7 +111,7 @@
     python313Packages.qtile
     alacritty
     rofi
-    unclutter
+    unclutter-xfixes   # hides the cursor on touch (see autostart.sh)
     nitrogen
     mousepad
     librsvg
