@@ -1,0 +1,151 @@
+<!doctype html>
+<!--
+  Rive prototype player. Query parameters:
+    renderer = webgl2 | canvas         Rive web runtime to use (default webgl2)
+    fit      = contain | cover | layout | fill   (default contain;
+               "layout" lets artboards built with Rive Layouts adapt to the window)
+    engine   = label shown in the overlay (set by main.py)
+  The .riv itself is served as /file.riv by main.py.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Rive Test</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1E1E1E; overflow: hidden;
+               font-family: sans-serif; user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  #hud { position: fixed; top: 8px; left: 8px; padding: 6px 10px; border-radius: 8px;
+         background: rgba(0, 0, 0, .55); color: #EAEAEA; font-size: 12px; line-height: 1.5;
+         white-space: pre; pointer-events: auto; }
+  #err { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+         color: #E05555; font-size: 15px; text-align: center; padding: 24px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">loading…</div>
+<div id="err"></div>
+<script>
+const params   = new URLSearchParams(location.search);
+const renderer = params.get("renderer") === "canvas" ? "canvas" : "webgl2";
+const fitName  = params.get("fit") || "contain";
+const engine   = params.get("engine") || "browser";
+const canvas   = document.getElementById("c");
+const hud      = document.getElementById("hud");
+let r = null, fileInfo = "", fps = 0;
+
+// Python side (main.py) reads console lines starting with "homy:".
+const emit = (kind, data) => console.log("homy:" + kind + " " + JSON.stringify(data));
+
+function showError(msg) {
+  const el = document.getElementById("err");
+  el.textContent = msg;
+  el.style.display = "flex";
+  emit("error", msg);
+}
+
+// Which GPU the page actually renders with — "SwiftShader"/"llvmpipe" means software.
+function gpuName() {
+  try {
+    const gl = document.createElement("canvas").getContext("webgl");
+    const ext = gl && gl.getExtension("WEBGL_debug_renderer_info");
+    return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : (gl ? "webgl (unknown)" : "no webgl");
+  } catch (e) { return "no webgl"; }
+}
+const gpu = gpuName();
+
+// Frame counter for the overlay.
+let frames = 0, last = performance.now();
+(function tick(now) {
+  frames++;
+  if (now - last >= 1000) { fps = frames * 1000 / (now - last); frames = 0; last = now; drawHud(); }
+  requestAnimationFrame(tick);
+})(last);
+
+function drawHud() {
+  hud.textContent = `${fps.toFixed(0)} fps · ${renderer} · ${engine}\n${fileInfo}\nGPU: ${gpu}\n(tap here: switch renderer)`;
+}
+
+// Tap the overlay to reload with the other renderer.
+hud.addEventListener("click", () => {
+  params.set("renderer", renderer === "webgl2" ? "canvas" : "webgl2");
+  location.search = params.toString();
+});
+
+function loadScript(src) {
+  return new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = ok; s.onerror = () => fail(new Error("cannot load " + src));
+    document.head.appendChild(s);
+  });
+}
+
+// Small API for the Python side to drive the file (e.g. Home Assistant data later).
+// Data binding (View Model properties, Rive's current way) is tried first;
+// legacy state machine inputs are the fallback for older files.
+//   window.homy.set("light/brightness", 40)   number / boolean / string property
+//   window.homy.fire("tap")                    trigger
+window.homy = {
+  vmi() { return r ? r.viewModelInstance : null; },
+  props() { const v = this.vmi(); return v ? v.properties.map(p => `${p.name}:${p.type}`) : []; },
+  inputs() { return r && r.stateMachineNames.length ? (r.stateMachineInputs(r.stateMachineNames[0]) || []) : []; },
+  set(path, value) {
+    const v = this.vmi();
+    const prop = v && (typeof value === "number" ? v.number(path)
+                     : typeof value === "boolean" ? v.boolean(path) : v.string(path));
+    if (prop) { prop.value = value; return true; }
+    const i = this.inputs().find(i => i.name === path);
+    if (i) { i.value = value; return true; }
+    return false;
+  },
+  fire(path) {
+    const t = this.vmi() && this.vmi().trigger(path);
+    if (t) { t.trigger(); return true; }
+    const i = this.inputs().find(i => i.name === path);
+    if (i) { i.fire(); return true; }
+    return false;
+  },
+};
+
+loadScript(`vendor/${renderer}/rive.js`).then(() => {
+  // The probe pass below plays nothing on purpose, and the legacy APIs are
+  // kept deliberately as a fallback for older files — don't warn about them.
+  rive.Rive.suppressDeprecationWarnings = ["default-state-machine", "state-machine-inputs", "rive-events"];
+  rive.RuntimeLoader.setWasmUrl(`vendor/${renderer}/rive.wasm`);
+  rive.RuntimeLoader.setWasmFallbackUrl(`vendor/${renderer}/rive_fallback.wasm`);
+  const fits = { contain: rive.Fit.Contain, cover: rive.Fit.Cover, layout: rive.Fit.Layout, fill: rive.Fit.Fill };
+  const layout = new rive.Layout({ fit: fits[fitName] || rive.Fit.Contain, alignment: rive.Alignment.Center });
+
+  // Pass 1 only reads the file's state machine / animation names. Pass 2 starts
+  // the first state machine by name, which is what wires up touch input
+  // (Rive listeners); files without one play their first animation instead.
+  const probe = new rive.Rive({
+    src: "file.riv", canvas, autoplay: false,
+    onLoadError: () => showError("Could not load the .riv file."),
+    onLoad: () => {
+      const machines = probe.stateMachineNames, anims = probe.animationNames;
+      probe.cleanup();
+      r = new rive.Rive({
+        src: "file.riv", canvas, layout, autoplay: true, autoBind: true,
+        stateMachine: machines.length ? machines[0] : undefined,
+        animations: machines.length ? undefined : anims[0],
+        onLoad: () => {
+          r.resizeDrawingSurfaceToCanvas();
+          const what = machines.length ? `state machine "${machines[0]}"` : `animation "${anims[0] || "-"}"`;
+          fileInfo = `${params.get("name") || "file.riv"} · ${what} · fit ${fitName}`;
+          drawHud();
+          emit("loaded", { renderer, gpu, stateMachines: machines, animations: anims,
+                           viewModel: window.homy.props(),
+                           inputs: window.homy.inputs().map(i => i.name) });
+        },
+      });
+      r.on(rive.EventType.RiveEvent, e => emit("event", e.data));
+    },
+  });
+}).catch(e => showError(String(e)));
+
+window.addEventListener("resize", () => r && r.resizeDrawingSurfaceToCanvas());
+</script>
+</body>
+</html>
