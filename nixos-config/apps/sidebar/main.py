@@ -133,13 +133,18 @@ def main():
     Handler.on_group = staticmethod(bridge.group_changed.emit)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
+    # Fully transparent window: only what the Rive file draws is visible (needs
+    # the compositor — picom — running, otherwise X11 shows black there).
     win = QMainWindow()
     win.setWindowTitle(TITLE)
     win.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+    win.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     view = QWebEngineView()
+    view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    view.setStyleSheet("background: transparent;")
     page = Page(view)
     view.setPage(page)
-    page.setBackgroundColor(Qt.GlobalColor.black)
+    page.setBackgroundColor(Qt.GlobalColor.transparent)
     renderer = "webgl2"      # the only Rive renderer that draws feathers / blend modes
     view.setUrl(QUrl(f"http://127.0.0.1:{PORT}/index.html?renderer={renderer}"))
     win.setCentralWidget(view)

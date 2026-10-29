@@ -125,6 +125,7 @@
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
     (pkgs.callPackage ../../apps/sidebar {})   # Rive navigation sidebar (right edge)
+    (pkgs.callPackage ../../apps/wallpaper {}) # desktop background behind the transparent UI
     xsetroot
     (pkgs.callPackage ../../apps/screenshot {})
     (pkgs.callPackage ../../apps/system {

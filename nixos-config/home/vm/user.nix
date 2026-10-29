@@ -8,7 +8,7 @@
   programs.zsh.enable = true;
 
   xdg.configFile."qtile".source = ../../dotfiles/qtile;
-  xdg.configFile."picom".source = ../../dotfiles/picom/vm;
+  xdg.configFile."picom".source = ../../dotfiles/picom/homy;   # minimal: transparency only
 
   programs.alacritty = {
     enable = true;

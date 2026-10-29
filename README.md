@@ -200,6 +200,19 @@ To see its output, restart it by hand from a terminal on the device:
 `pkill -f homy-sidebar; DISPLAY=:0 homy-sidebar`. Qtile logs where it pinned
 the window: `grep homy ~/.local/share/qtile/qtile.log`.
 
+### Wallpaper & Transparency
+
+The Rive UI draws its own pixels and is transparent elsewhere; what shows behind
+it is the desktop background, set by `homy-wallpaper` (VM, Pi 5). It needs the
+compositor (picom, minimal config in `dotfiles/picom/homy`) — without it,
+transparent areas show black.
+
+```bash
+# use your own image (png or jpg), then log out/in or run:
+cp my-wallpaper.png ~/.config/homy/wallpaper.png
+homy-wallpaper
+```
+
 ### On-screen Keyboard
 
 `osk` runs as a background service (started by Qtile's autostart) and types

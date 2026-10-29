@@ -313,8 +313,9 @@ def _show_launcher(qtile):
 
 # ----------------------
 # Homy sidebar (apps/sidebar) — the Rive-drawn navigation over the right bar.
-# Its window is pinned there as a static (untiled) window; the right bar below
-# keeps reserving the space and its buttons are the fallback if it isn't running.
+# Its window is pinned there as a static (untiled) window; RIGHT_BAR (a Gap)
+# keeps the space free and draws nothing, so the sidebar's transparent parts
+# show the wallpaper.
 # Group changes are reported to it so it highlights the matching button.
 # ----------------------
 SIDEBAR_TITLE = "Homy Sidebar"
@@ -430,6 +431,29 @@ BAR_HEIGHT = 40
 BTN_W      = 95
 BTN_H      = 40
 
+# Right edge: on hosts with the Rive sidebar (apps/sidebar) the bar only
+# reserves the space and draws nothing, so the sidebar's transparent areas show
+# the wallpaper. The Pi 3B+ has no sidebar and keeps the classic SVG buttons.
+RIGHT_BAR = (
+    bar.Bar(
+        [
+            SvgButton(icon("Home_Button.svg"), icon("Home_Button_Highlighted.svg"),
+                lazy.group["1"].toscreen()),
+            SvgButton(icon("LightBulb_Button.svg"), icon("LightBulb_Button_Highlighted.svg"),
+                lazy.group["2"].toscreen()),
+            SvgButton(icon("Heiz_Button.svg"), icon("Heiz_Button_Highlighted.svg"),
+                lazy.group["3"].toscreen()),
+            SvgButton(icon("Music_Button.svg"), icon("Music_Button_Highlighted.svg"),
+                lazy.group["4"].toscreen()),
+            SvgButton(icon("Shutdown_Button.svg"), icon("Shutdown_Button_Highlighted.svg"),
+                lazy.spawn("systemctl poweroff")),
+        ],
+        BAR_WIDTH,
+        background=colors["bg"],
+    )
+    if _hostname == "pi" else bar.Gap(BAR_WIDTH)
+)
+
 screens = [
     Screen(
         top=bar.Bar(
@@ -462,22 +486,7 @@ screens = [
             BAR_HEIGHT,
             background=colors["bg"],
         ),
-        right=bar.Bar(
-            [
-                SvgButton(icon("Home_Button.svg"), icon("Home_Button_Highlighted.svg"),
-                    lazy.group["1"].toscreen()),
-                SvgButton(icon("LightBulb_Button.svg"), icon("LightBulb_Button_Highlighted.svg"),
-                    lazy.group["2"].toscreen()),
-                SvgButton(icon("Heiz_Button.svg"), icon("Heiz_Button_Highlighted.svg"),
-                    lazy.group["3"].toscreen()),
-                SvgButton(icon("Music_Button.svg"), icon("Music_Button_Highlighted.svg"),
-                    lazy.group["4"].toscreen()),
-                SvgButton(icon("Shutdown_Button.svg"), icon("Shutdown_Button_Highlighted.svg"),
-                    lazy.spawn("systemctl poweroff")),
-            ],
-            BAR_WIDTH,
-            background=colors["bg"],
-        ),
+        right=RIGHT_BAR,
     ),
 ]
 

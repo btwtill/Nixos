@@ -8,7 +8,7 @@
   programs.zsh.enable = true;
 
   xdg.configFile."qtile".source = ../../dotfiles/qtile;
-  xdg.configFile."picom".source = ../../dotfiles/picom/pi;   # same compositor settings as the Pi 3B+
+  xdg.configFile."picom".source = ../../dotfiles/picom/homy;   # minimal: transparency only
 
   home.file."wallpapers/background.jpg".source =
     ../../dotfiles/wallpapers/background.png;

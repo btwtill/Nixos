@@ -135,6 +135,8 @@
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
     (pkgs.callPackage ../../apps/sidebar {})   # Rive navigation sidebar (right edge)
+    (pkgs.callPackage ../../apps/wallpaper {}) # desktop background behind the transparent UI
+    picom                                     # compositor: transparent windows (sidebar)
     chromium   # for web/Rive apps from the app store (e.g. app-store/rive-test)
     xsetroot
     (pkgs.callPackage ../../apps/system {

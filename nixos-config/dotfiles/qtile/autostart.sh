@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 
 setxkbmap de
-# Solid desktop background in the exact UI grey. It shows in the gaps around
-# windows; drawing the wallpaper image there came out one shade darker
-# (#1d1d1d) and showed as a dark frame around the apps.
-xsetroot -solid "#1e1e1e"
+# Desktop background — shows behind the transparent Rive UI and between apps.
+# homy-wallpaper (VM, Pi 5) uses ~/.config/homy/wallpaper.png if present; the
+# Pi 3B+ keeps the solid UI grey.
+if command -v homy-wallpaper &>/dev/null; then
+  homy-wallpaper
+else
+  xsetroot -solid "#1e1e1e"
+fi
 
 # On-screen keyboard service (hidden until an app runs `osk show`)
 if command -v osk &>/dev/null; then
