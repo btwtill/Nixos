@@ -134,6 +134,7 @@
     (pkgs.callPackage ../../apps/wifi {})
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
+    (pkgs.callPackage ../../apps/sidebar {})   # Rive navigation sidebar (right edge)
     chromium   # for web/Rive apps from the app store (e.g. app-store/rive-test)
     xsetroot
     (pkgs.callPackage ../../apps/system {

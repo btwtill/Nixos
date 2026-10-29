@@ -124,6 +124,7 @@
     (pkgs.callPackage ../../apps/wifi {})
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
+    (pkgs.callPackage ../../apps/sidebar {})   # Rive navigation sidebar (right edge)
     xsetroot
     (pkgs.callPackage ../../apps/screenshot {})
     (pkgs.callPackage ../../apps/system {

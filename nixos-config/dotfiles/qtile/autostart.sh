@@ -10,6 +10,10 @@ xsetroot -solid "#1e1e1e"
 if command -v osk &>/dev/null; then
   osk daemon &
 fi
+# Rive-drawn navigation sidebar (pinned over the right bar by the Qtile config)
+if command -v homy-sidebar &>/dev/null; then
+  homy-sidebar &
+fi
 if command -v picom &>/dev/null; then
   picom &
 fi

@@ -12,6 +12,8 @@ import shlex
 import io
 import os
 import signal
+import urllib.parse
+import urllib.request
 
 import socket
 _hostname = socket.gethostname()
@@ -309,8 +311,35 @@ def _show_launcher(qtile):
             _to_app_group(w, app_id)
     launcher.toscreen()
 
+# ----------------------
+# Homy sidebar (apps/sidebar) — the Rive-drawn navigation over the right bar.
+# Its window is pinned there as a static (untiled) window; the right bar below
+# keeps reserving the space and its buttons are the fallback if it isn't running.
+# Group changes are reported to it so it highlights the matching button.
+# ----------------------
+SIDEBAR_TITLE = "Homy Sidebar"
+SIDEBAR_URL   = "http://127.0.0.1:47811/group?name="
+
+@hook.subscribe.setgroup
+def notify_sidebar():
+    name = qtile.current_group.name
+
+    def send():
+        try:
+            urllib.request.urlopen(SIDEBAR_URL + urllib.parse.quote(name), timeout=0.5).close()
+        except Exception:
+            pass                                   # sidebar not running (yet)
+
+    threading.Thread(target=send, daemon=True).start()
+
 @hook.subscribe.client_new
 def assign_startup_group(client):
+    if client.name == SIDEBAR_TITLE:
+        screen = qtile.current_screen
+        client.static(screen.index, x=screen.x + screen.width - BAR_WIDTH, y=screen.y + BAR_HEIGHT,
+                      width=BAR_WIDTH, height=screen.height - 2 * BAR_HEIGHT)
+        logger.warning("homy: sidebar pinned over the right bar")
+        return
     app_id = _homy_app_id(client)
     if app_id:
         group = _to_app_group(client, app_id)

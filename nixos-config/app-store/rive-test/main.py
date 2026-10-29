@@ -185,7 +185,9 @@ def run_webengine(url: str):
         os.environ.setdefault("QT_XCB_GL_INTEGRATION", "xcb_egl")
         flags.append("--disable-features=Vulkan")
     else:
-        flags += ["--disable-gpu", "--enable-unsafe-swiftshader"]
+        # software compositing (no dma_buf) but WebGL kept on SwiftShader: Rive's
+        # WebGL2 renderer is the only one that draws feathers and blend modes
+        flags += ["--disable-gpu-compositing", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
     os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", " ".join(flags))
     url += "&gpu=" + ("on" if gpu else "off")
     log(f"QtWebEngine rendering: {'GPU' if gpu else 'software (no real GPU found)'}"

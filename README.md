@@ -179,6 +179,27 @@ Apps you're not looking at are **paused** (frozen, no CPU/GPU) and resume when
 you switch back. An app that must keep working in the background (e.g. audio)
 sets `"background": true` in its `manifest.json`.
 
+### Rive Sidebar
+
+The right-hand navigation is `homy-sidebar` (`nixos-config/apps/sidebar`): the
+`SideBar` artboard of the Rive file **Neo_Button**, played with Rive's web runtime.
+Qtile pins its window over the right bar (the old buttons underneath are the
+fallback if it isn't running). Tapping a button switches the Qtile group; when
+the group changes any other way, the matching button lights up.
+
+Design → device:
+
+```bash
+# on the Mac: pull the latest from the Rive editor, build, copy into the repo
+nixos-config/apps/sidebar/update-riv.sh --pull
+git commit -am "sidebar: new design" && git push
+# on the VM / Pi 5: pull, rebuild, reboot
+```
+
+To see its output, restart it by hand from a terminal on the device:
+`pkill -f homy-sidebar; DISPLAY=:0 homy-sidebar`. Qtile logs where it pinned
+the window: `grep homy ~/.local/share/qtile/qtile.log`.
+
 ### On-screen Keyboard
 
 `osk` runs as a background service (started by Qtile's autostart) and types
