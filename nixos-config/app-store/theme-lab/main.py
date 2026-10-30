@@ -173,7 +173,7 @@ class ThemeLab(QWidget):
         ed.addWidget(self.big)
         grid = QGridLayout()
         self.sliders = []
-        for i, ch in enumerate("RGB"):
+        for i, ch in enumerate("RGBA"):
             lbl = QLabel(ch)
             lbl.setStyleSheet(f"color: {TEXT_SEC};")
             sl = QSlider(Qt.Orientation.Horizontal)
@@ -192,7 +192,7 @@ class ThemeLab(QWidget):
         hexrow = QHBoxLayout()
         hexrow.addWidget(QLabel("Hex"))
         self.hex = HexEdit()
-        self.hex.setMaxLength(7)
+        self.hex.setMaxLength(9)
         self.hex.setStyleSheet(f"background: {BG}; color: {TEXT}; border: 1px solid {CARD_ALT}; border-radius: 8px;"
                                " padding: 6px 10px; font-size: 15px; font-family: monospace;")
         self.hex.editingFinished.connect(self._from_hex)
@@ -259,15 +259,21 @@ class ThemeLab(QWidget):
         self.token_label.setText(name)
         self._show(self.tokens[name])
 
+    @staticmethod
+    def _rgba(hex_: str) -> tuple[int, int, int, int]:
+        """#RRGGBB or #RRGGBBAA → (r, g, b, a)."""
+        v = hex_.lstrip("#")
+        return int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16), int(v[6:8], 16) if len(v) == 8 else 255
+
     def _show(self, hex_: str):
-        c = QColor(hex_)
-        for (sl, val), v in zip(self.sliders, (c.red(), c.green(), c.blue())):
+        r, g, b, a = self._rgba(hex_)
+        for (sl, val), v in zip(self.sliders, (r, g, b, a)):
             sl.blockSignals(True)
             sl.setValue(v)
             sl.blockSignals(False)
             val.setText(str(v))
         self.hex.setText(hex_.upper())
-        self.big.setStyleSheet(f"background: {hex_}; border-radius: 8px;")
+        self.big.setStyleSheet(f"background: rgba({r}, {g}, {b}, {a}); border-radius: 8px;")
 
     def _set(self, hex_: str):
         self.tokens[self.current] = hex_.upper()
@@ -276,17 +282,17 @@ class ThemeLab(QWidget):
         self.save_timer.start()
 
     def _from_sliders(self):
-        r, g, b = (sl.value() for sl, _ in self.sliders)
-        self._set(f"#{r:02X}{g:02X}{b:02X}")
+        r, g, b, a = (sl.value() for sl, _ in self.sliders)
+        self._set(f"#{r:02X}{g:02X}{b:02X}" + (f"{a:02X}" if a != 255 else ""))
 
     def _from_hex(self):
         text = self.hex.text().strip()
         if not text.startswith("#"):
             text = "#" + text
-        if QColor.isValidColorName(text) and len(text) == 7:
+        if len(text) in (7, 9) and all(c in "0123456789abcdefABCDEF" for c in text[1:]):
             self._set(text)
         else:
-            self.status.setText(f"'{self.hex.text()}' is not a #RRGGBB colour.")
+            self.status.setText(f"'{self.hex.text()}' is not a #RRGGBB or #RRGGBBAA colour.")
 
     def _copy_from(self):
         src = api("GET", f"/themes/{self.base.currentData()}")

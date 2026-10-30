@@ -20,10 +20,12 @@ let surfaceRive = null;
 let theme = null;
 const themeHooks = [];
 
+// "#RRGGBB" or "#RRGGBBAA" (alpha last, like CSS)
 function setColor(prop, hex) {
-  if (!prop || !/^#[0-9a-f]{6}$/i.test(hex)) return;
-  const v = parseInt(hex.slice(1), 16);
-  prop.argb(255, (v >> 16) & 255, (v >> 8) & 255, v & 255);
+  if (!prop || !/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(hex)) return;
+  const v = parseInt(hex.slice(1, 7), 16);
+  const a = hex.length === 9 ? parseInt(hex.slice(7, 9), 16) : 255;
+  prop.argb(a, (v >> 16) & 255, (v >> 8) & 255, v & 255);
 }
 
 // Tokens go into the file's global Theme view model by name (tokens the file

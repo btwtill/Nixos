@@ -21,7 +21,7 @@ HTTP API on 127.0.0.1:47820 (CORS open, local only)
   POST   /active            {"id": …} — switch theme
   GET    /events            Server-Sent Events: the active theme now and on
                             every change (EventSource in a web page)
-Tokens are "#RRGGBB" strings.
+Tokens are "#RRGGBB" or "#RRGGBBAA" strings (AA = alpha).
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ HERE = Path(__file__).resolve().parent
 CONFIG = Path.home() / ".config" / "homy"
 USER_DIR = CONFIG / "themes"
 ACTIVE_FILE = CONFIG / "theme-active"
-COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
+COLOR = re.compile(r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")   # #RRGGBB or #RRGGBBAA
 ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 
 
@@ -66,6 +66,9 @@ class Store:
         for f in sorted(USER_DIR.glob("*.json")) if USER_DIR.is_dir() else []:
             try:
                 t = json.loads(f.read_text())
+                # bring older themes up to date: every current token, nothing else
+                defaults = self.builtin[self.default]["tokens"]
+                t["tokens"] = {k: t.get("tokens", {}).get(k, v) for k, v in defaults.items()}
                 out[t["id"]] = {**t, "builtin": False}
             except (OSError, ValueError, KeyError):
                 log(f"ignoring unreadable theme {f}")
@@ -87,7 +90,7 @@ class Store:
             if name not in self.tokens:
                 raise ValueError(f"unknown token '{name}'")
             if not COLOR.match(str(value)):
-                raise ValueError(f"{name}: expected #RRGGBB, got {value!r}")
+                raise ValueError(f"{name}: expected #RRGGBB or #RRGGBBAA, got {value!r}")
             tokens[name] = value.upper()
         theme = {"id": theme_id, "name": str(body.get("name") or theme_id), "tokens": tokens}
         USER_DIR.mkdir(parents=True, exist_ok=True)

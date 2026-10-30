@@ -1,11 +1,12 @@
 {
   "tokens": {
-    "surface":       "button / card surface",
-    "icon":          "icon colour",
-    "iconShadow":    "inner shading of icons",
-    "accent":        "accent for highlights and active states",
-    "iconHighlight": "light added to the icon of the selected button",
-    "wallpaper":     "desktop background"
+    "surface": "button / card surface",
+    "icon": "icon colour",
+    "iconShadow": "inner shading of icons",
+    "accent": "icon colour of the selected button, other highlights",
+    "buttonHighlight": "light shadow on the top-left of buttons",
+    "buttonShadow": "dark shadow on the bottom-right of buttons",
+    "wallpaper": "desktop background"
   },
   "default": "dark",
   "themes": [
@@ -13,16 +14,26 @@
       "id": "dark",
       "name": "Dark",
       "tokens": {
-        "surface": "#282828", "icon": "#444444", "iconShadow": "#010101",
-        "accent": "#C8B09A", "iconHighlight": "#404040", "wallpaper": "#1E1E1E"
+        "surface": "#282828",
+        "icon": "#444444",
+        "iconShadow": "#010101",
+        "accent": "#C8B09A",
+        "buttonHighlight": "#454545F2",
+        "buttonShadow": "#141414E6",
+        "wallpaper": "#1E1E1E"
       }
     },
     {
       "id": "midnight",
       "name": "Midnight",
       "tokens": {
-        "surface": "#1F2430", "icon": "#4A5468", "iconShadow": "#0B0E14",
-        "accent": "#3DAEE9", "iconHighlight": "#2A4A66", "wallpaper": "#141821"
+        "surface": "#1F2430",
+        "icon": "#4A5468",
+        "iconShadow": "#0B0E14",
+        "accent": "#3DAEE9",
+        "buttonHighlight": "#323A4AF2",
+        "buttonShadow": "#06080CE6",
+        "wallpaper": "#141821"
       }
     }
   ]
