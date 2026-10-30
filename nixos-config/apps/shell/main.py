@@ -158,7 +158,9 @@ def main():
         win.setWindowTitle(spec["title"])
         flags = Qt.WindowType.FramelessWindowHint
         if spec["below"]:
-            flags |= Qt.WindowType.WindowStaysOnBottomHint     # _NET_WM_STATE_BELOW
+            # _NET_WM_STATE_BELOW, and taps pass through: with bring_front_click a
+            # tap on the wallpaper would otherwise raise it over everything.
+            flags |= Qt.WindowType.WindowStaysOnBottomHint | Qt.WindowType.WindowTransparentForInput
         win.setWindowFlags(flags)
         view = QWebEngineView()
         page = Page(name, view)

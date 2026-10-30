@@ -14,6 +14,7 @@ import os
 import signal
 import urllib.parse
 import urllib.request
+import xcffib.xproto  #type: ignore
 
 import socket
 _hostname = socket.gethostname()
@@ -347,8 +348,13 @@ def assign_startup_group(client):
         client.static(screen.index, x=screen.x, y=screen.y, width=screen.width, height=screen.height)
         static = qtile.windows_map.get(client.wid)
         if static is not None:
-            static.keep_below(True)                   # below every window, bars included
-        logger.warning("homy: wallpaper pinned full screen, below everything")
+            static.keep_below(True)
+            # keep_below only orders it among managed windows — the bars are
+            # Qtile-internal and not part of that, so the wallpaper (created after
+            # them) would stay on top of the bars. Put it at the very bottom of the
+            # X stack instead, below everything.
+            static.window.configure(stackmode=xcffib.xproto.StackMode.Below)
+        logger.warning("homy: wallpaper pinned full screen, at the bottom of the stack")
         return
     app_id = _homy_app_id(client)
     if app_id:
