@@ -35,7 +35,10 @@ WEB = HERE / "web"
 UI = Path(os.environ.get("HOMY_UI_DIR", "/run/current-system/sw/share/homy/ui"))
 PORT = 47811                      # the pages and Qtile's setgroup hook talk to this
 
+BAR_HEIGHT = 40                   # Qtile's top/bottom bars (BAR_HEIGHT in the Qtile config)
+
 # name → window title (Qtile matches on it), size, behind everything?, transparent?
+# size None = the screen between the top and bottom bar (Qtile pins it there).
 SURFACES = {
     "wallpaper": {"title": "Homy Wallpaper", "size": None, "below": True, "transparent": False},
     "sidebar":   {"title": "Homy Sidebar", "size": (180, 520), "below": False, "transparent": True},
@@ -178,7 +181,7 @@ def main():
             sidebar["page"] = page
         view.setUrl(QUrl(f"http://127.0.0.1:{PORT}/{name}.html?renderer=webgl2"))
         win.setCentralWidget(view)
-        w, h = spec["size"] or (screen.width(), screen.height())
+        w, h = spec["size"] or (screen.width(), screen.height() - 2 * BAR_HEIGHT)
         win.setFixedSize(w, h)
         win.show()
         windows.append(win)

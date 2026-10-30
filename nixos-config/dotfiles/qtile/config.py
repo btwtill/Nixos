@@ -317,7 +317,9 @@ def _show_launcher(qtile):
 #   sidebar    pinned over the right edge as a static (untiled) window;
 #              RIGHT_BAR (a Gap) keeps the space free and draws nothing.
 #              Group changes are reported to it to highlight the matching button.
-#   wallpaper  pinned full screen and kept below every other window.
+#   wallpaper  pinned between the top and bottom bar (under the sidebar),
+#              below every other window. Not over the bars: they are Qtile's
+#              own windows and the wallpaper ended up stacked above them.
 # ----------------------
 SIDEBAR_TITLE   = "Homy Sidebar"
 WALLPAPER_TITLE = "Homy Wallpaper"
@@ -345,7 +347,8 @@ def assign_startup_group(client):
         return
     if client.name == WALLPAPER_TITLE:
         screen = qtile.current_screen
-        client.static(screen.index, x=screen.x, y=screen.y, width=screen.width, height=screen.height)
+        client.static(screen.index, x=screen.x, y=screen.y + BAR_HEIGHT,
+                      width=screen.width, height=screen.height - 2 * BAR_HEIGHT)
         static = qtile.windows_map.get(client.wid)
         if static is not None:
             static.keep_below(True)
@@ -354,7 +357,7 @@ def assign_startup_group(client):
             # them) would stay on top of the bars. Put it at the very bottom of the
             # X stack instead, below everything.
             static.window.configure(stackmode=xcffib.xproto.StackMode.Below)
-        logger.warning("homy: wallpaper pinned full screen, at the bottom of the stack")
+        logger.warning("homy: wallpaper pinned between the bars, at the bottom of the stack")
         return
     app_id = _homy_app_id(client)
     if app_id:
