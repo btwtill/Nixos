@@ -139,9 +139,8 @@
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
     (pkgs.callPackage ../../ui {})            # homy-ui: all .riv files + Rive web runtime
-    (pkgs.callPackage ../../apps/sidebar {})   # Rive navigation sidebar (right edge)
-    (pkgs.callPackage ../../apps/wallpaper {}) # desktop background behind the transparent UI
-    picom                                     # compositor: transparent windows (sidebar)
+    (pkgs.callPackage ../../apps/shell {})     # homy-shell: Rive sidebar + wallpaper
+    picom                                     # compositor: transparent windows (shell)
     chromium   # for web/Rive apps from the app store (e.g. app-store/rive-test)
     xsetroot
     (pkgs.callPackage ../../apps/system {

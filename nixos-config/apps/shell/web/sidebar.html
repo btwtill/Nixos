@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- Sidebar surface: the SideBar artboard of sidebar.riv (navigation). -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Homy Sidebar</title>
+<style>
+  /* transparent: only the Rive artboard draws — the wallpaper shows through the rest */
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="shell.js"></script>
+<script>
+let active = null;
+let hostValue = 0;    // last activeIndex set by main.py — not a tap, don't report it back
+let reported  = null; // last tap reported (the change callback can fire more than once)
+
+// Called by main.py: highlight the button for the current Qtile group (-1 = none).
+window.homy = {
+  setActive(i) {
+    hostValue = i;
+    reported = null;
+    if (active) active.value = i;
+  },
+};
+
+startSurface({
+  riv: "sidebar", artboard: "SideBar", fit: "contain", alignment: "topCenter",
+  onLoad: (r) => {
+    active = r.viewModelInstance && r.viewModelInstance.number("activeIndex");
+    if (!active) { emit("error", "SideBar has no activeIndex — check the view model"); return; }
+    active.value = hostValue;
+    // A tap writes activeIndex inside the file; report it so main.py navigates.
+    active.on(() => {
+      const v = active.value;
+      if (v !== hostValue && v !== reported) { reported = v; emit("navigate", v); }
+    });
+  },
+});
+</script>
+</body>
+</html>

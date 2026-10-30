@@ -194,10 +194,16 @@ git commit -am "ui: new designs" && git push
 # on the VM / Pi 5: pull, rebuild, reboot
 ```
 
-**Sidebar** (`apps/sidebar`, `homy-sidebar`): plays `sidebar.riv`; Qtile pins
-it over the right edge. Tapping a button switches the Qtile group; when the
-group changes any other way, the matching button lights up. To see its output:
-`pkill -f homy-sidebar; DISPLAY=:0 homy-sidebar`.
+**Shell** (`apps/shell`, `homy-shell`): the Rive-drawn desktop surfaces in one
+process sharing one Chromium (each further surface costs a page, not a browser):
+- *sidebar* — `sidebar.riv`, pinned over the right edge. Tapping a button
+  switches the Qtile group; when the group changes any other way, the matching
+  button lights up.
+- *wallpaper* — `wallpaper.riv`, full screen behind every window; its colour is
+  the theme's `wallpaper` token, its size the screen.
+
+To see its output: `pkill -f homy-shell; DISPLAY=:0 homy-shell` (or only one
+surface: `homy-shell wallpaper`).
 
 **Themes** (`apps/theme`, `homy-theme`, a systemd user service): holds the colour
 themes — built-ins in `apps/theme/themes.json`, test themes in
@@ -215,18 +221,12 @@ To fine-tune colours on the device, install **Theme Lab** from the app store
 theme token by token with live preview, and copies the result as JSON for
 `themes.json`.
 
-### Wallpaper & Transparency
+### Transparency
 
-The Rive UI draws its own pixels and is transparent elsewhere; what shows behind
-it is the desktop background, set by `homy-wallpaper` (VM, Pi 5). It needs the
+The Rive surfaces draw their own pixels and are transparent elsewhere, so the
+Rive wallpaper shows through them and in the gaps between apps. That needs the
 compositor (picom, minimal config in `dotfiles/picom/homy`) — without it,
 transparent areas show black.
-
-```bash
-# use your own image (png or jpg), then log out/in or run:
-cp my-wallpaper.png ~/.config/homy/wallpaper.png
-homy-wallpaper
-```
 
 ### On-screen Keyboard
 

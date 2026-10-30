@@ -1,0 +1,42 @@
+<!doctype html>
+<!-- Wallpaper surface: the Wallpaper artboard of wallpaper.riv, full screen,
+     behind every window. Inputs: width/height = the screen, color = the
+     theme's "wallpaper" token. Whatever else the file draws or animates
+     shows up as designed. -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Homy Wallpaper</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1E1E1E; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="shell.js"></script>
+<script>
+function fitToScreen(r) {
+  const vmi = r.viewModelInstance;
+  if (!vmi) return;
+  const w = vmi.number("width"), h = vmi.number("height");
+  if (w) w.value = window.innerWidth;
+  if (h) h.value = window.innerHeight;
+  r.resizeDrawingSurfaceToCanvas();
+}
+
+onTheme((tokens, r) => {
+  const color = r.viewModelInstance && r.viewModelInstance.color("color");
+  if (color && tokens.wallpaper) setColor(color, tokens.wallpaper);
+});
+
+startSurface({
+  riv: "wallpaper", artboard: "Wallpaper", fit: "fill",
+  onLoad: (r) => {
+    fitToScreen(r);
+    window.addEventListener("resize", () => fitToScreen(r));
+  },
+});
+</script>
+</body>
+</html>

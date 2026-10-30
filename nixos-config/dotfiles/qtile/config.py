@@ -312,14 +312,15 @@ def _show_launcher(qtile):
     launcher.toscreen()
 
 # ----------------------
-# Homy sidebar (apps/sidebar) — the Rive-drawn navigation over the right bar.
-# Its window is pinned there as a static (untiled) window; RIGHT_BAR (a Gap)
-# keeps the space free and draws nothing, so the sidebar's transparent parts
-# show the wallpaper.
-# Group changes are reported to it so it highlights the matching button.
+# Homy shell (apps/shell) — the Rive-drawn surfaces, recognised by title:
+#   sidebar    pinned over the right edge as a static (untiled) window;
+#              RIGHT_BAR (a Gap) keeps the space free and draws nothing.
+#              Group changes are reported to it to highlight the matching button.
+#   wallpaper  pinned full screen and kept below every other window.
 # ----------------------
-SIDEBAR_TITLE = "Homy Sidebar"
-SIDEBAR_URL   = "http://127.0.0.1:47811/group?name="
+SIDEBAR_TITLE   = "Homy Sidebar"
+WALLPAPER_TITLE = "Homy Wallpaper"
+SIDEBAR_URL     = "http://127.0.0.1:47811/group?name="
 
 @hook.subscribe.setgroup
 def notify_sidebar():
@@ -340,6 +341,14 @@ def assign_startup_group(client):
         client.static(screen.index, x=screen.x + screen.width - BAR_WIDTH, y=screen.y + BAR_HEIGHT,
                       width=BAR_WIDTH, height=screen.height - 2 * BAR_HEIGHT)
         logger.warning("homy: sidebar pinned over the right bar")
+        return
+    if client.name == WALLPAPER_TITLE:
+        screen = qtile.current_screen
+        client.static(screen.index, x=screen.x, y=screen.y, width=screen.width, height=screen.height)
+        static = qtile.windows_map.get(client.wid)
+        if static is not None:
+            static.keep_below(True)                   # below every window, bars included
+        logger.warning("homy: wallpaper pinned full screen, below everything")
         return
     app_id = _homy_app_id(client)
     if app_id:
@@ -431,7 +440,7 @@ BAR_HEIGHT = 40
 BTN_W      = 95
 BTN_H      = 40
 
-# Right edge: on hosts with the Rive sidebar (apps/sidebar) the bar only
+# Right edge: on hosts with the Rive sidebar (apps/shell) the bar only
 # reserves the space and draws nothing, so the sidebar's transparent areas show
 # the wallpaper. The Pi 3B+ has no sidebar and keeps the classic SVG buttons.
 RIGHT_BAR = (

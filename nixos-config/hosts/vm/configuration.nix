@@ -126,8 +126,7 @@
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
     (pkgs.callPackage ../../ui {})            # homy-ui: all .riv files + Rive web runtime
-    (pkgs.callPackage ../../apps/sidebar {})   # Rive navigation sidebar (right edge)
-    (pkgs.callPackage ../../apps/wallpaper {}) # desktop background behind the transparent UI
+    (pkgs.callPackage ../../apps/shell {})     # homy-shell: Rive sidebar + wallpaper
     xsetroot
     (pkgs.callPackage ../../apps/screenshot {})
     (pkgs.callPackage ../../apps/system {

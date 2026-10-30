@@ -2,30 +2,31 @@
 , ui ? pkgs.callPackage ../../ui {}    # homy-ui: the .riv files + Rive web runtime
 }:
 
-# Homy sidebar — Qtile's right-hand navigation, drawn by Rive (ui/riv/sidebar.riv).
+# Homy shell — the Rive-drawn desktop surfaces (sidebar, wallpaper, later the
+# bars) in one process sharing one Chromium. See main.py.
 let
   pyEnv = pkgs.python313.withPackages (ps: [ ps.pyqt6 ps.pyqt6-webengine ]);
 in
 pkgs.stdenv.mkDerivation {
-  pname   = "homy-sidebar";
-  version = "0.2.0";
+  pname   = "homy-shell";
+  version = "0.3.0";
 
   src = ./.;
 
   buildInputs = [ pyEnv ];
 
   installPhase = ''
-    lib=$out/lib/homy-sidebar
+    lib=$out/lib/homy-shell
     mkdir -p $out/bin $lib/web
     cp main.py $lib/
-    cp web/index.html $lib/web/
+    cp web/*.html web/*.js $lib/web/
     cp ${../common}/webengine.py $lib/
 
-    cat > $out/bin/homy-sidebar <<EOF
+    cat > $out/bin/homy-shell <<EOF
     #!/bin/sh
     export HOMY_UI_DIR="${ui}/share/homy/ui"
     exec ${pyEnv}/bin/python $lib/main.py "\$@"
     EOF
-    chmod +x $out/bin/homy-sidebar
+    chmod +x $out/bin/homy-shell
   '';
 }
