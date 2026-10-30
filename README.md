@@ -179,26 +179,41 @@ Apps you're not looking at are **paused** (frozen, no CPU/GPU) and resume when
 you switch back. An app that must keep working in the background (e.g. audio)
 sets `"background": true` in its `manifest.json`.
 
-### Rive Sidebar
+### Graphics (Rive) & Themes
 
-The right-hand navigation is `homy-sidebar` (`nixos-config/apps/sidebar`): the
-`SideBar` artboard of the Rive file **Neo_Button**, played with Rive's web runtime.
-Qtile pins its window over the right bar (the old buttons underneath are the
-fallback if it isn't running). Tapping a button switches the Qtile group; when
-the group changes any other way, the matching button lights up.
-
-Design → device:
+All graphics are Rive files designed in `../homy-design` (see its README):
+`homy-ui` is the shared library (Theme, IconButton, …), every UI surface
+(sidebar, wallpaper, later bars and apps) is its own file that imports it.
+On the device they arrive as the **homy-ui** package (`nixos-config/ui`):
+`share/homy/ui/riv/<surface>.riv` plus Rive's web runtime — apps load from there.
 
 ```bash
-# on the Mac: pull the latest from the Rive editor, build, copy into the repo
-nixos-config/apps/sidebar/update-riv.sh --pull
-git commit -am "sidebar: new design" && git push
+# on the Mac: build every surface from homy-design into nixos-config/ui/riv
+nixos-config/ui/sync.sh          # add --pull to fetch the latest from the Rive editor first
+git commit -am "ui: new designs" && git push
 # on the VM / Pi 5: pull, rebuild, reboot
 ```
 
-To see its output, restart it by hand from a terminal on the device:
-`pkill -f homy-sidebar; DISPLAY=:0 homy-sidebar`. Qtile logs where it pinned
-the window: `grep homy ~/.local/share/qtile/qtile.log`.
+**Sidebar** (`apps/sidebar`, `homy-sidebar`): plays `sidebar.riv`; Qtile pins
+it over the right edge. Tapping a button switches the Qtile group; when the
+group changes any other way, the matching button lights up. To see its output:
+`pkill -f homy-sidebar; DISPLAY=:0 homy-sidebar`.
+
+**Themes** (`apps/theme`, `homy-theme`, a systemd user service): holds the colour
+themes — built-ins in `apps/theme/themes.json`, test themes in
+`~/.config/homy/themes/` — and pushes the active one to every Rive app, which
+applies the tokens to its global `Theme`.
+
+```bash
+curl -s 127.0.0.1:47820/themes                                   # list + active
+curl -s -X POST 127.0.0.1:47820/active -d '{"id":"midnight"}'    # switch
+journalctl --user -u homy-theme                                  # logs
+```
+
+To fine-tune colours on the device, install **Theme Lab** from the app store
+(`homy-apps install ~/Nixos/nixos-config/app-store/theme-lab`): it edits a test
+theme token by token with live preview, and copies the result as JSON for
+`themes.json`.
 
 ### Wallpaper & Transparency
 

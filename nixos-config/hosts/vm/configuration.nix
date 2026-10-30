@@ -3,6 +3,7 @@
 {
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix")
+    ../../apps/theme/module.nix   # homy-theme colour service (user service)
   ];
 
   nixpkgs.overlays = [
@@ -124,6 +125,7 @@
     (pkgs.callPackage ../../apps/wifi {})
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
+    (pkgs.callPackage ../../ui {})            # homy-ui: all .riv files + Rive web runtime
     (pkgs.callPackage ../../apps/sidebar {})   # Rive navigation sidebar (right edge)
     (pkgs.callPackage ../../apps/wallpaper {}) # desktop background behind the transparent UI
     xsetroot

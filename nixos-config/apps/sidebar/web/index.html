@@ -40,6 +40,26 @@ window.homy = {
   },
 };
 
+// Colours: the homy-theme service pushes the active theme (now and on every
+// change); its tokens go into the file's global Theme view model by name.
+// Tokens the file doesn't have are skipped.
+let theme = null;
+function applyTheme() {
+  const vmi = r && r.globalViewModelInstance("Theme");
+  if (!vmi || !theme) return;
+  for (const [name, hex] of Object.entries(theme.tokens)) {
+    const prop = vmi.color(name);
+    if (!prop || !/^#[0-9a-f]{6}$/i.test(hex)) continue;
+    const v = parseInt(hex.slice(1), 16);
+    prop.argb(255, (v >> 16) & 255, (v >> 8) & 255, v & 255);
+  }
+}
+new EventSource("http://127.0.0.1:47820/events").onmessage = (e) => {
+  theme = JSON.parse(e.data);
+  applyTheme();
+  emit("theme", theme.id);
+};
+
 function loadScript(src) {
   return new Promise((ok, fail) => {
     const s = document.createElement("script");
@@ -70,6 +90,7 @@ loadScript(`vendor/${renderer}/rive.js`).then(() => {
           active = r.viewModelInstance && r.viewModelInstance.number("activeIndex");
           if (!active) { emit("error", "SideBar has no activeIndex — check the view model"); return; }
           active.value = hostValue;
+          applyTheme();
           // A tap writes activeIndex inside the file; report it so main.py navigates.
           active.on(() => {
             const v = active.value;

@@ -1,7 +1,8 @@
 """Homy sidebar — the right-hand navigation bar, drawn by Rive.
 
 Plays the SideBar artboard of sidebar.riv (built from homy-design/Neo_Button,
-see update-riv.sh) with Rive's web runtime in a frameless QtWebEngine window.
+see ui/sync.sh) with Rive's web runtime in a frameless QtWebEngine window.
+Both come from the homy-ui package (HOMY_UI_DIR, set by the wrapper).
 Qtile pins the window over its right bar ("Homy Sidebar" in
 dotfiles/qtile/config.py).
 
@@ -26,8 +27,9 @@ import webengine
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE / "web"
-RIV = HERE / "sidebar.riv"
-VENDOR = Path(os.environ.get("HOMY_RIVE_RUNTIME", HERE / "vendor"))
+UI = Path(os.environ.get("HOMY_UI_DIR", "/run/current-system/sw/share/homy/ui"))
+RIV = UI / "riv" / "sidebar.riv"
+VENDOR = UI / "runtime"
 
 TITLE = "Homy Sidebar"            # Qtile recognises the window by this
 W, H = 180, 520                   # the SideBar artboard / Qtile's right bar

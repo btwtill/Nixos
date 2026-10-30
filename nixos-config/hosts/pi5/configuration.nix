@@ -6,6 +6,10 @@
 # no extlinux, no Broadcom firmware hack and no disko config here.
 
 {
+  imports = [
+    ../../apps/theme/module.nix   # homy-theme colour service (user service)
+  ];
+
   nixpkgs.overlays = [
     (final: prev: {
       qtile-unwrapped = prev.qtile-unwrapped.overrideAttrs (_: {
@@ -134,6 +138,7 @@
     (pkgs.callPackage ../../apps/wifi {})
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
+    (pkgs.callPackage ../../ui {})            # homy-ui: all .riv files + Rive web runtime
     (pkgs.callPackage ../../apps/sidebar {})   # Rive navigation sidebar (right edge)
     (pkgs.callPackage ../../apps/wallpaper {}) # desktop background behind the transparent UI
     picom                                     # compositor: transparent windows (sidebar)
