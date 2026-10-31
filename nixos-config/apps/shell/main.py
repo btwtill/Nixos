@@ -40,8 +40,9 @@ PORT = 47811                      # the pages and Qtile's setgroup hook talk to 
 BAR_HEIGHT = 40                   # Qtile's top/bottom bars (BAR_HEIGHT in the Qtile config)
 
 # name → window title (Qtile matches on it), size, behind everything?, transparent?
-# size None = the screen between the top and bottom bar, "top" = the top bar
-# (screen width × BAR_HEIGHT); Qtile pins the windows there.
+# size None = the screen above the bottom bar (the transparent top bar lies on
+# top of it), "top" = the top bar (screen width × BAR_HEIGHT); Qtile pins the
+# windows there.
 SURFACES = {
     "wallpaper": {"title": "Homy Wallpaper", "size": None, "below": True, "transparent": False},
     "sidebar":   {"title": "Homy Sidebar", "size": (180, 520), "below": False, "transparent": True},
@@ -207,7 +208,7 @@ def main():
         if spec["size"] == "top":
             w, h = screen.width(), BAR_HEIGHT
         else:
-            w, h = spec["size"] or (screen.width(), screen.height() - 2 * BAR_HEIGHT)
+            w, h = spec["size"] or (screen.width(), screen.height() - BAR_HEIGHT)
         win.setFixedSize(w, h)
         win.show()
         windows.append(win)

@@ -325,9 +325,12 @@ def show_launcher_hook():
 #              Group changes are reported to it to highlight the matching button.
 #   top bar    pinned over the top edge the same way (TOP_BAR is a Gap); it gets
 #              the same group reports (one /group call serves every surface).
-#   wallpaper  pinned between the top and bottom bar (under the sidebar),
-#              below every other window. Not over the bars: they are Qtile's
-#              own windows and the wallpaper ended up stacked above them.
+#   wallpaper  pinned from the top edge down to the bottom bar (under the top
+#              bar and the sidebar), below every other window. It has to reach
+#              under the top bar: that one is transparent, and with only
+#              xsetroot's colour behind it picom draws black. Not over the
+#              bottom bar: that is still Qtile's own window, and the wallpaper
+#              ended up stacked above it.
 # ----------------------
 SIDEBAR_TITLE   = "Homy Sidebar"
 TOPBAR_TITLE    = "Homy Top Bar"
@@ -361,8 +364,8 @@ def assign_startup_group(client):
         return
     if client.name == WALLPAPER_TITLE:
         screen = qtile.current_screen
-        client.static(screen.index, x=screen.x, y=screen.y + BAR_HEIGHT,
-                      width=screen.width, height=screen.height - 2 * BAR_HEIGHT)
+        client.static(screen.index, x=screen.x, y=screen.y,
+                      width=screen.width, height=screen.height - BAR_HEIGHT)
         static = qtile.windows_map.get(client.wid)
         if static is not None:
             static.keep_below(True)
@@ -371,7 +374,7 @@ def assign_startup_group(client):
             # them) would stay on top of the bars. Put it at the very bottom of the
             # X stack instead, below everything.
             static.window.configure(stackmode=xcffib.xproto.StackMode.Below)
-        logger.warning("homy: wallpaper pinned between the bars, at the bottom of the stack")
+        logger.warning("homy: wallpaper pinned above the bottom bar, at the bottom of the stack")
         return
     app_id = _homy_app_id(client)
     if app_id:
