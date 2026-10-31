@@ -5,6 +5,7 @@
     "iconShadow": "inner shading of icons",
     "accent": "icon colour of the selected button, other highlights",
     "buttonHighlight": "light shadow on the top-left of buttons",
+    "buttonHighlightSmall": "light shadow on the top-left of small buttons (a bit lighter: more contrast at small size)",
     "buttonShadow": "dark shadow on the bottom-right of buttons",
     "wallpaper": "desktop background"
   },
@@ -19,6 +20,7 @@
         "iconShadow": "#00000099",
         "accent": "#F6DBA2",
         "buttonHighlight": "#2F2F2FE6",
+        "buttonHighlightSmall": "#3B3B3BE6",
         "buttonShadow": "#101010E6",
         "wallpaper": "#1E1E1E"
       }
@@ -32,6 +34,7 @@
         "iconShadow": "#0B0E14",
         "accent": "#3DAEE9",
         "buttonHighlight": "#323A4AF2",
+        "buttonHighlightSmall": "#3E4656E6",
         "buttonShadow": "#06080CE6",
         "wallpaper": "#141821"
       }
