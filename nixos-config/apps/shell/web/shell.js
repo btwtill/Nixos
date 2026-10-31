@@ -3,6 +3,7 @@
 // sync with the homy-theme service, and talks to main.py through the console.
 //
 //   startSurface({ riv, artboard, fit, alignment, onLoad(r) })
+//   startNavSurface({ … })      a bar of buttons driven by activeIndex
 //   onTheme((tokens, r) => …)   extra theme handling for this surface
 //   emit(kind, data)            message to main.py ("homy:<kind> <json>")
 //
@@ -96,4 +97,35 @@ function startSurface({ riv, artboard, fit = "contain", alignment = "center", on
   }).catch((e) => emit("error", String(e)));
 }
 
-window.addEventListener("resize", () => surfaceRive && surfaceRive.resizeDrawingSurfaceToCanvas());
+// Navigation bars (SideBar, TopBar): the artboard's view model has a number
+// `activeIndex`. A tap writes it inside the file → reported as "navigate";
+// main.py calls homy.setActive(i) to highlight the button of the current Qtile
+// group (-1 = none) — that is not a tap and isn't reported back.
+function startNavSurface(opts) {
+  let active = null;
+  let hostValue = -1;
+  let reported = null;   // the change callback can fire more than once per tap
+
+  window.homy = {
+    setActive(i) {
+      hostValue = i;
+      reported = null;
+      if (active) active.value = i;
+    },
+  };
+
+  startSurface({
+    ...opts,
+    onLoad: (r) => {
+      active = r.viewModelInstance && r.viewModelInstance.number("activeIndex");
+      if (!active) { emit("error", `${opts.artboard} has no activeIndex — check the view model`); return; }
+      active.value = hostValue;
+      active.on(() => {
+        const v = active.value;
+        if (v !== hostValue && v !== reported) { reported = v; emit("navigate", v); }
+      });
+    },
+  });
+}
+
+window.addEventListener("resize",() => surfaceRive && surfaceRive.resizeDrawingSurfaceToCanvas());

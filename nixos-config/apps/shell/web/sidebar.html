@@ -14,32 +14,7 @@
 <canvas id="c"></canvas>
 <script src="shell.js"></script>
 <script>
-let active = null;
-let hostValue = 0;    // last activeIndex set by main.py — not a tap, don't report it back
-let reported  = null; // last tap reported (the change callback can fire more than once)
-
-// Called by main.py: highlight the button for the current Qtile group (-1 = none).
-window.homy = {
-  setActive(i) {
-    hostValue = i;
-    reported = null;
-    if (active) active.value = i;
-  },
-};
-
-startSurface({
-  riv: "sidebar", artboard: "SideBar", fit: "contain", alignment: "topCenter",
-  onLoad: (r) => {
-    active = r.viewModelInstance && r.viewModelInstance.number("activeIndex");
-    if (!active) { emit("error", "SideBar has no activeIndex — check the view model"); return; }
-    active.value = hostValue;
-    // A tap writes activeIndex inside the file; report it so main.py navigates.
-    active.on(() => {
-      const v = active.value;
-      if (v !== hostValue && v !== reported) { reported = v; emit("navigate", v); }
-    });
-  },
-});
+startNavSurface({ riv: "sidebar", artboard: "SideBar", fit: "contain", alignment: "topCenter" });
 </script>
 </body>
 </html>

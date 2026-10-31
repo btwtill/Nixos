@@ -5,13 +5,16 @@
 #   ./sync.sh --pull   first pull each one from the Rive editor (overwrites
 #                      local, unpushed edits in homy-design)
 #
+# homy-design holds one folder per design (a complete look: homy-ui, surfaces,
+# assets); HOMY_DESIGN_THEME picks which one is built (default: "default").
+#
 # Then commit riv/ and rebuild NixOS. Needs the Rive CLI (`rive`).
 # homy-ui (the library) is not built here: its parts arrive inside each surface.
 set -euo pipefail
 
-DESIGN="${HOMY_DESIGN:-$HOME/Documents/Management/10_Projects/personal/homy-design}"
+DESIGN="${HOMY_DESIGN:-$HOME/Documents/Management/10_Projects/personal/homy-design}/${HOMY_DESIGN_THEME:-default}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SURFACES=(sidebar wallpaper)
+SURFACES=(sidebar topbar wallpaper)
 
 for s in "${SURFACES[@]}"; do
   project="$DESIGN/$s"

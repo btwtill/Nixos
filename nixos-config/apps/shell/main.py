@@ -1,6 +1,6 @@
 """Homy shell — the Rive-drawn parts of the desktop, in one process.
 
-Every surface (sidebar, wallpaper, later the bars) is a frameless QtWebEngine
+Every surface (sidebar, top bar, wallpaper, later the bottom bar) is a frameless QtWebEngine
 window playing one artboard of a .riv from the homy-ui package (HOMY_UI_DIR,
 set by the wrapper). They share one Chromium (browser, GPU and renderer
 processes), so a surface costs a page, not a whole browser. Qtile recognises
@@ -8,6 +8,8 @@ the windows by title and pins them (dotfiles/qtile/config.py, "Homy shell").
 
   sidebar    right edge, transparent. Tap → switch the Qtile group; Qtile
              reports group changes to 127.0.0.1:47811/group?name=… → highlight.
+  topbar     top edge, full width, transparent. Terminal / app menu / Wi-Fi,
+             same tap + highlight scheme as the sidebar.
   wallpaper  full screen, below every window. Width/height = the screen,
              colour = the theme's "wallpaper" token.
 Colours of every surface follow the homy-theme service (web/shell.js).
@@ -38,33 +40,51 @@ PORT = 47811                      # the pages and Qtile's setgroup hook talk to 
 BAR_HEIGHT = 40                   # Qtile's top/bottom bars (BAR_HEIGHT in the Qtile config)
 
 # name → window title (Qtile matches on it), size, behind everything?, transparent?
-# size None = the screen between the top and bottom bar (Qtile pins it there).
+# size None = the screen between the top and bottom bar, "top" = the top bar
+# (screen width × BAR_HEIGHT); Qtile pins the windows there.
 SURFACES = {
     "wallpaper": {"title": "Homy Wallpaper", "size": None, "below": True, "transparent": False},
     "sidebar":   {"title": "Homy Sidebar", "size": (180, 520), "below": False, "transparent": True},
+    "topbar":    {"title": "Homy Top Bar", "size": "top", "below": False, "transparent": True},
 }
 
-# Sidebar: activeIndex (button position) ↔ Qtile group. Button 4 (Switch) is
-# the power button, like the old bar's Shutdown button.
-INDEX_TO_GROUP = {0: "1", 1: "2", 2: "3", 3: "4"}
-GROUP_TO_INDEX = {g: i for i, g in INDEX_TO_GROUP.items()}
-POWER_INDEX = 4
+# Navigation surfaces: activeIndex (button position) → what a tap does.
+#   group name  switch to that Qtile group (and highlight the button there)
+#   "menu"      the app menu — Qtile's user hook "show_launcher" (it first moves
+#               stray app windows out of the menu's group)
+#   "power"     systemctl poweroff (sidebar button 4, like the old Shutdown button)
+NAV = {
+    "sidebar": {0: "1", 1: "2", 2: "3", 3: "4", 4: "power"},
+    "topbar":  {0: "5", 1: "menu", 2: "8"},
+}
+MENU_GROUP = "9"                  # the menu's own group: highlights the menu button
 
 
 def log(msg: str):
     print(f"[homy-shell] {msg}", flush=True)
 
 
-def navigate(index: int):
-    """A sidebar button was tapped (runs in a worker thread)."""
-    if index == POWER_INDEX:
+def active_index(surface: str, group: str) -> int:
+    """The button to highlight on a surface while `group` is shown (-1: none)."""
+    for index, action in NAV[surface].items():
+        if action == group or (action == "menu" and group == MENU_GROUP):
+            return index
+    return -1
+
+
+def navigate(surface: str, index: int):
+    """A button on a navigation surface was tapped (runs in a worker thread)."""
+    action = NAV[surface].get(index)
+    if action == "power":
         log("power button → systemctl poweroff")
         subprocess.run(["systemctl", "poweroff"])
-    elif index in INDEX_TO_GROUP:
-        subprocess.run(["qtile", "cmd-obj", "-o", "group", INDEX_TO_GROUP[index], "-f", "toscreen"],
+    elif action == "menu":
+        subprocess.run(["qtile", "cmd-obj", "-f", "fire_user_hook", "-a", "show_launcher"],
                        capture_output=True)
+    elif action:
+        subprocess.run(["qtile", "cmd-obj", "-o", "group", action, "-f", "toscreen"], capture_output=True)
     else:
-        log(f"no action for sidebar button {index}")
+        log(f"no action for {surface} button {index}")
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -123,7 +143,9 @@ def main():
     app = QApplication(sys.argv[:1])
     app.setApplicationName("Homy Shell")
     bridge = Bridge()
-    sidebar = {"index": 0, "loaded": False, "page": None}   # Qtile starts on group 1 = Home
+    # per navigation surface: its page, loaded yet?, the button to highlight
+    nav = {s: {"index": active_index(s, "1"), "loaded": False, "page": None}   # Qtile starts on group 1
+           for s in NAV if s in wanted}
 
     class Page(QWebEnginePage):
         def __init__(self, surface: str, parent):
@@ -136,18 +158,19 @@ def main():
                     log(f"{self.surface}: js: {message} ({source}:{line})")
                 return
             kind, _, data = message[5:].partition(" ")
-            if self.surface == "sidebar" and kind == "navigate":
-                threading.Thread(target=navigate, args=(int(float(data)),), daemon=True).start()
+            if self.surface in nav and kind == "navigate":
+                threading.Thread(target=navigate, args=(self.surface, int(float(data))), daemon=True).start()
                 return
-            if self.surface == "sidebar" and kind == "loaded":
-                sidebar["loaded"] = True
-                self.runJavaScript(f"homy.setActive({sidebar['index']})")
+            if self.surface in nav and kind == "loaded":
+                nav[self.surface]["loaded"] = True
+                self.runJavaScript(f"homy.setActive({nav[self.surface]['index']})")
             log(f"{self.surface}: {kind} {data}")
 
     def on_group(name: str):
-        sidebar["index"] = GROUP_TO_INDEX.get(name, -1)   # -1: no button for this group
-        if sidebar["loaded"]:
-            sidebar["page"].runJavaScript(f"homy.setActive({sidebar['index']})")
+        for surface, state in nav.items():
+            state["index"] = active_index(surface, name)
+            if state["loaded"]:
+                state["page"].runJavaScript(f"homy.setActive({state['index']})")
 
     bridge.group_changed.connect(on_group)
     Handler.on_group = staticmethod(bridge.group_changed.emit)
@@ -177,11 +200,14 @@ def main():
             page.setBackgroundColor(Qt.GlobalColor.transparent)
         else:
             page.setBackgroundColor(Qt.GlobalColor.black)
-        if name == "sidebar":
-            sidebar["page"] = page
+        if name in nav:
+            nav[name]["page"] = page
         view.setUrl(QUrl(f"http://127.0.0.1:{PORT}/{name}.html?renderer=webgl2"))
         win.setCentralWidget(view)
-        w, h = spec["size"] or (screen.width(), screen.height() - 2 * BAR_HEIGHT)
+        if spec["size"] == "top":
+            w, h = screen.width(), BAR_HEIGHT
+        else:
+            w, h = spec["size"] or (screen.width(), screen.height() - 2 * BAR_HEIGHT)
         win.setFixedSize(w, h)
         win.show()
         windows.append(win)

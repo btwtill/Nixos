@@ -312,16 +312,25 @@ def _show_launcher(qtile):
             _to_app_group(w, app_id)
     launcher.toscreen()
 
+@hook.subscribe.user("show_launcher")
+def show_launcher_hook():
+    """The Rive top bar's menu button (homy-shell runs
+    `qtile cmd-obj -f fire_user_hook -a show_launcher`)."""
+    _show_launcher(qtile)
+
 # ----------------------
 # Homy shell (apps/shell) — the Rive-drawn surfaces, recognised by title:
 #   sidebar    pinned over the right edge as a static (untiled) window;
 #              RIGHT_BAR (a Gap) keeps the space free and draws nothing.
 #              Group changes are reported to it to highlight the matching button.
+#   top bar    pinned over the top edge the same way (TOP_BAR is a Gap); it gets
+#              the same group reports (one /group call serves every surface).
 #   wallpaper  pinned between the top and bottom bar (under the sidebar),
 #              below every other window. Not over the bars: they are Qtile's
 #              own windows and the wallpaper ended up stacked above them.
 # ----------------------
 SIDEBAR_TITLE   = "Homy Sidebar"
+TOPBAR_TITLE    = "Homy Top Bar"
 WALLPAPER_TITLE = "Homy Wallpaper"
 SIDEBAR_URL     = "http://127.0.0.1:47811/group?name="
 
@@ -344,6 +353,11 @@ def assign_startup_group(client):
         client.static(screen.index, x=screen.x + screen.width - BAR_WIDTH, y=screen.y + BAR_HEIGHT,
                       width=BAR_WIDTH, height=screen.height - 2 * BAR_HEIGHT)
         logger.warning("homy: sidebar pinned over the right bar")
+        return
+    if client.name == TOPBAR_TITLE:
+        screen = qtile.current_screen
+        client.static(screen.index, x=screen.x, y=screen.y, width=screen.width, height=BAR_HEIGHT)
+        logger.warning("homy: top bar pinned over the top gap")
         return
     if client.name == WALLPAPER_TITLE:
         screen = qtile.current_screen
@@ -472,25 +486,32 @@ RIGHT_BAR = (
     if _hostname == "pi" else bar.Gap(BAR_WIDTH)
 )
 
+# Top edge: the Rive top bar (apps/shell) on hosts with the shell — the bar
+# only reserves the space, like RIGHT_BAR. The Pi 3B+ keeps the SVG buttons.
+TOP_BAR = (
+    bar.Bar(
+        [
+            SvgButton(icon("Terminal_Button.svg"), icon("Terminal_Button_Highlighted.svg"),
+                lazy.group["5"].toscreen(),
+                icon_width=BTN_W, icon_height=BTN_H),
+            widget.Spacer(),
+            SvgButton(icon("Menu_Button.svg"), icon("Menu_Button_Highlighted.svg"),
+                lazy.function(_show_launcher),
+                icon_width=375, icon_height=40),
+            widget.Spacer(),
+            SvgButton(icon("WifiButton.svg"), icon("WifiButtonPushed.svg"),
+                lazy.group["8"].toscreen(),
+                icon_width=BTN_W, icon_height=BTN_H),
+        ],
+        BAR_HEIGHT,
+        background=colors["bg"],
+    )
+    if _hostname == "pi" else bar.Gap(BAR_HEIGHT)
+)
+
 screens = [
     Screen(
-        top=bar.Bar(
-            [
-                SvgButton(icon("Terminal_Button.svg"), icon("Terminal_Button_Highlighted.svg"),
-                    lazy.group["5"].toscreen(),
-                    icon_width=BTN_W, icon_height=BTN_H),
-                widget.Spacer(),
-                SvgButton(icon("Menu_Button.svg"), icon("Menu_Button_Highlighted.svg"),
-                    lazy.function(_show_launcher),
-                    icon_width=375, icon_height=40),
-                widget.Spacer(),
-                SvgButton(icon("WifiButton.svg"), icon("WifiButtonPushed.svg"),
-                    lazy.group["8"].toscreen(),
-                    icon_width=BTN_W, icon_height=BTN_H),
-            ],
-            BAR_HEIGHT,
-            background=colors["bg"],
-        ),
+        top=TOP_BAR,
         bottom=bar.Bar(
             [
                 SvgButton(icon("Bluetooth_Button.svg"), icon("Bluetooth_Button_Highlighted.svg"),

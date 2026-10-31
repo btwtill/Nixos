@@ -181,7 +181,7 @@ sets `"background": true` in its `manifest.json`.
 
 ### Graphics (Rive) & Themes
 
-All graphics are Rive files designed in `../homy-design` (see its README):
+All graphics are Rive files designed in `../homy-design/<design>` (see its README):
 `homy-ui` is the shared library (Theme, IconButton, …), every UI surface
 (sidebar, wallpaper, later bars and apps) is its own file that imports it.
 On the device they arrive as the **homy-ui** package (`nixos-config/ui`):
@@ -190,6 +190,7 @@ On the device they arrive as the **homy-ui** package (`nixos-config/ui`):
 ```bash
 # on the Mac: build every surface from homy-design into nixos-config/ui/riv
 nixos-config/ui/sync.sh          # add --pull to fetch the latest from the Rive editor first
+# another design: HOMY_DESIGN_THEME=<folder> nixos-config/ui/sync.sh
 git commit -am "ui: new designs" && git push
 # on the VM / Pi 5: pull, rebuild, reboot
 ```
@@ -199,6 +200,9 @@ process sharing one Chromium (each further surface costs a page, not a browser):
 - *sidebar* — `sidebar.riv`, pinned over the right edge. Tapping a button
   switches the Qtile group; when the group changes any other way, the matching
   button lights up.
+- *topbar* — `topbar.riv`, pinned over the top edge: Terminal (group 5), app
+  menu, Wi-Fi (group 8), highlighted the same way. Replaces Qtile's top bar
+  (which stays as an empty gap); the Pi 3B+ keeps the old SVG bar.
 - *wallpaper* — `wallpaper.riv`, full screen behind every window; its colour is
   the theme's `wallpaper` token, its size the screen.
 
