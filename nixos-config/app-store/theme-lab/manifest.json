@@ -2,5 +2,6 @@
   "id": "theme-lab",
   "name": "Theme Lab",
   "exec": "homy-python main.py",
-  "category": "System"
+  "category": "System",
+  "background": true
 }

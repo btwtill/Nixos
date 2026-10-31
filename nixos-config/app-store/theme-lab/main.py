@@ -14,6 +14,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QGuiApplication
@@ -24,6 +25,7 @@ from PyQt6.QtWidgets import (
 
 SERVICE = "http://127.0.0.1:47820"
 TEST_ID, TEST_NAME = "test", "Test theme"
+EXPORT = Path.home() / ".config" / "homy" / "theme-lab-export.json"   # "Copy JSON" also lands here
 W, H = 814, 490
 
 BG, CARD, CARD_ALT = "#1E1E1E", "#2A2A2A", "#333333"
@@ -315,9 +317,15 @@ class ThemeLab(QWidget):
         self.preview_btn.setText(f"Back to {self.previous_active}" if previewing else "Preview on device")
 
     def _copy_json(self):
+        # Clipboard, and a file as well: the clipboard only works while this app
+        # can answer the paste (and reaches the Mac only through spice-vdagent).
         theme = {"id": "my-theme", "name": "My theme", "tokens": self.tokens}
-        QGuiApplication.clipboard().setText(json.dumps(theme, indent=2))
-        self.status.setText("Copied — paste it into apps/theme/themes.json (change id and name).")
+        text = json.dumps(theme, indent=2)
+        QGuiApplication.clipboard().setText(text)
+        EXPORT.parent.mkdir(parents=True, exist_ok=True)
+        EXPORT.write_text(text + "\n")
+        self.status.setText(f"Copied, and saved to {EXPORT} — paste it into apps/theme/themes.json "
+                            "(change id and name).")
 
 
 def main():

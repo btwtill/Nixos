@@ -16,6 +16,12 @@ fi
 if command -v picom &>/dev/null; then
   picom &
 fi
+# VM: the session half of the SPICE agent (clipboard ↔ the Mac). The system
+# daemon runs as a service; desktops start this half via XDG autostart, which
+# Qtile doesn't do.
+if command -v spice-vdagent &>/dev/null; then
+  spice-vdagent
+fi
 # Touch panel: hide the cursor the moment the screen is touched, start hidden,
 # and otherwise hide it 0.1 s after the mouse stops (fractions of a second work).
 unclutter --timeout 0.1 --hide-on-touch --start-hidden &
