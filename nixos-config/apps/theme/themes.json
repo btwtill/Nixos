@@ -14,12 +14,12 @@
       "id": "dark",
       "name": "Dark",
       "tokens": {
-        "surface": "#282828",
-        "icon": "#444444",
-        "iconShadow": "#010101",
-        "accent": "#C8B09A",
-        "buttonHighlight": "#454545F2",
-        "buttonShadow": "#141414E6",
+        "surface": "#1F1F1F",
+        "icon": "#2F2F2F",
+        "iconShadow": "#00000099",
+        "accent": "#F6DBA2",
+        "buttonHighlight": "#2F2F2FE6",
+        "buttonShadow": "#101010E6",
         "wallpaper": "#1E1E1E"
       }
     },
