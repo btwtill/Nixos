@@ -15,8 +15,8 @@ HTTP API on 127.0.0.1:47820 (CORS open, local only)
   GET    /themes            {"active": id, "themes": [{id, name, builtin}]}
   GET    /themes/<id>       {id, name, builtin, tokens}
   PUT    /themes/<id>       {name?, tokens} — create/update a user theme; tokens
-                            are merged onto the default theme, so all exist
-  DELETE /themes/<id>       remove a user theme (falls back to the default if active)
+                            are merged onto the fallback theme, so all exist
+  DELETE /themes/<id>       remove a user theme (back to the fallback theme if it was active)
   GET    /active            the active theme, like /themes/<id>
   POST   /active            {"id": …} — switch theme
   GET    /events            Server-Sent Events: the active theme now and on
@@ -51,14 +51,14 @@ class Store:
         data = json.loads((HERE / "themes.json").read_text())
         self.tokens: dict[str, str] = data["tokens"]
         self.builtin = {t["id"]: {**t, "builtin": True} for t in data["themes"]}
-        self.default = data["default"]
+        self.fallback = data["fallback"]      # used when no (valid) theme is active
         self.lock = threading.Lock()
         self.listeners: list[queue.Queue] = []
         try:
             active = ACTIVE_FILE.read_text().strip()
         except OSError:
             active = ""
-        self.active = active if self.get(active) else self.default
+        self.active = active if self.get(active) else self.fallback
 
     # ── themes ────────────────────────────────────────────────────────────────
     def user_themes(self) -> dict[str, dict]:
@@ -67,8 +67,8 @@ class Store:
             try:
                 t = json.loads(f.read_text())
                 # bring older themes up to date: every current token, nothing else
-                defaults = self.builtin[self.default]["tokens"]
-                t["tokens"] = {k: t.get("tokens", {}).get(k, v) for k, v in defaults.items()}
+                base = self.builtin[self.fallback]["tokens"]
+                t["tokens"] = {k: t.get("tokens", {}).get(k, v) for k, v in base.items()}
                 out[t["id"]] = {**t, "builtin": False}
             except (OSError, ValueError, KeyError):
                 log(f"ignoring unreadable theme {f}")
@@ -85,7 +85,7 @@ class Store:
             raise PermissionError(f"'{theme_id}' is a built-in theme")
         if not ID.match(theme_id):
             raise ValueError("id must be lowercase letters, digits and dashes")
-        tokens = dict(self.builtin[self.default]["tokens"])
+        tokens = dict(self.builtin[self.fallback]["tokens"])
         for name, value in (body.get("tokens") or {}).items():
             if name not in self.tokens:
                 raise ValueError(f"unknown token '{name}'")
@@ -104,7 +104,7 @@ class Store:
             raise PermissionError(f"'{theme_id}' is a built-in theme")
         (USER_DIR / f"{theme_id}.json").unlink(missing_ok=True)
         if theme_id == self.active:
-            self.set_active(self.default)
+            self.set_active(self.fallback)
 
     def set_active(self, theme_id: str):
         if not self.get(theme_id):

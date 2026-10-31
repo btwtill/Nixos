@@ -9,19 +9,19 @@
     "buttonShadow": "dark shadow on the bottom-right of buttons",
     "wallpaper": "desktop background"
   },
-  "default": "dark",
+  "fallback": "dark",
   "themes": [
     {
       "id": "dark",
       "name": "Dark",
       "tokens": {
         "surface": "#1F1F1F",
-        "icon": "#2F2F2F",
-        "iconShadow": "#00000099",
-        "accent": "#F6DBA2",
-        "buttonHighlight": "#2F2F2FE6",
-        "buttonHighlightSmall": "#3B3B3BE6",
-        "buttonShadow": "#101010E6",
+        "icon": "#515151",
+        "iconShadow": "#000000",
+        "accent": "#DADADA",
+        "buttonHighlight": "#373737",
+        "buttonHighlightSmall": "#C8C8C8",
+        "buttonShadow": "#121212",
         "wallpaper": "#1E1E1E"
       }
     },
