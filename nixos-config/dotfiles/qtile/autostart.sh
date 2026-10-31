@@ -9,7 +9,7 @@ xsetroot -solid "#1e1e1e"
 if command -v osk &>/dev/null; then
   osk daemon &
 fi
-# Rive-drawn desktop surfaces — sidebar, top bar, wallpaper (pinned by the Qtile config)
+# Rive-drawn desktop surfaces — sidebar, top + bottom bar, wallpaper (pinned by the Qtile config)
 if command -v homy-shell &>/dev/null; then
   homy-shell &
 fi

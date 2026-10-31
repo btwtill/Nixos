@@ -10,6 +10,8 @@ the windows by title and pins them (dotfiles/qtile/config.py, "Homy shell").
              reports group changes to 127.0.0.1:47811/group?name=… → highlight.
   topbar     top edge, full width, transparent. Terminal / app menu / Wi-Fi,
              same tap + highlight scheme as the sidebar.
+  bottombar  bottom edge, full width, transparent. Bluetooth / System, same
+             scheme, plus the clock (the page writes the local time).
   wallpaper  full screen, below every window. Width/height = the screen,
              colour = the theme's "wallpaper" token.
 Colours of every surface follow the homy-theme service (web/shell.js).
@@ -40,13 +42,14 @@ PORT = 47811                      # the pages and Qtile's setgroup hook talk to 
 BAR_HEIGHT = 40                   # Qtile's top/bottom bars (BAR_HEIGHT in the Qtile config)
 
 # name → window title (Qtile matches on it), size, behind everything?, transparent?
-# size None = the screen above the bottom bar (the transparent top bar lies on
-# top of it), "top" = the top bar (screen width × BAR_HEIGHT); Qtile pins the
+# size None = the whole screen (the transparent bars lie on top of it), "bar" =
+# a top/bottom bar (screen width × BAR_HEIGHT); Qtile pins the
 # windows there.
 SURFACES = {
     "wallpaper": {"title": "Homy Wallpaper", "size": None, "below": True, "transparent": False},
     "sidebar":   {"title": "Homy Sidebar", "size": (180, 520), "below": False, "transparent": True},
-    "topbar":    {"title": "Homy Top Bar", "size": "top", "below": False, "transparent": True},
+    "topbar":    {"title": "Homy Top Bar", "size": "bar", "below": False, "transparent": True},
+    "bottombar": {"title": "Homy Bottom Bar", "size": "bar", "below": False, "transparent": True},
 }
 
 # Navigation surfaces: activeIndex (button position) → what a tap does.
@@ -57,6 +60,7 @@ SURFACES = {
 NAV = {
     "sidebar": {0: "1", 1: "2", 2: "3", 3: "4", 4: "power"},
     "topbar":  {0: "5", 1: "menu", 2: "8"},
+    "bottombar": {0: "7", 1: "6"},
 }
 MENU_GROUP = "9"                  # the menu's own group: highlights the menu button
 
@@ -205,10 +209,10 @@ def main():
             nav[name]["page"] = page
         view.setUrl(QUrl(f"http://127.0.0.1:{PORT}/{name}.html?renderer=webgl2"))
         win.setCentralWidget(view)
-        if spec["size"] == "top":
+        if spec["size"] == "bar":
             w, h = screen.width(), BAR_HEIGHT
         else:
-            w, h = spec["size"] or (screen.width(), screen.height() - BAR_HEIGHT)
+            w, h = spec["size"] or (screen.width(), screen.height())
         win.setFixedSize(w, h)
         win.show()
         windows.append(win)

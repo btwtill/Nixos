@@ -7,6 +7,7 @@
     "buttonHighlight": "light shadow on the top-left of buttons",
     "buttonHighlightSmall": "light shadow on the top-left of small buttons (a bit lighter: more contrast at small size)",
     "buttonShadow": "dark shadow on the bottom-right of buttons",
+    "textColor": "text, e.g. the clock",
     "wallpaper": "desktop background"
   },
   "fallback": "dark",
@@ -22,6 +23,7 @@
         "buttonHighlight": "#373737",
         "buttonHighlightSmall": "#C8C8C8",
         "buttonShadow": "#121212",
+        "textColor": "#515151",
         "wallpaper": "#1E1E1E"
       }
     },
@@ -36,6 +38,7 @@
         "buttonHighlight": "#323A4AF2",
         "buttonHighlightSmall": "#3E4656E6",
         "buttonShadow": "#06080CE6",
+        "textColor": "#4A5468",
         "wallpaper": "#141821"
       }
     }

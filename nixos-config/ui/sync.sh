@@ -14,7 +14,7 @@ set -euo pipefail
 
 DESIGN="${HOMY_DESIGN:-$HOME/Documents/Management/10_Projects/personal/homy-design}/${HOMY_DESIGN_THEME:-default}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SURFACES=(sidebar topbar wallpaper)
+SURFACES=(sidebar topbar bottombar wallpaper)
 
 for s in "${SURFACES[@]}"; do
   project="$DESIGN/$s"

@@ -325,15 +325,15 @@ def show_launcher_hook():
 #              Group changes are reported to it to highlight the matching button.
 #   top bar    pinned over the top edge the same way (TOP_BAR is a Gap); it gets
 #              the same group reports (one /group call serves every surface).
-#   wallpaper  pinned from the top edge down to the bottom bar (under the top
-#              bar and the sidebar), below every other window. It has to reach
-#              under the top bar: that one is transparent, and with only
-#              xsetroot's colour behind it picom draws black. Not over the
-#              bottom bar: that is still Qtile's own window, and the wallpaper
-#              ended up stacked above it.
+#   bottom bar pinned over the bottom edge the same way (BOTTOM_BAR is a Gap).
+#   wallpaper  pinned over the whole screen, below every other window: the
+#              bars are transparent, and with only xsetroot's colour behind
+#              them picom draws black. (Qtile's own bar windows would end up
+#              under it — there are none on hosts with the shell.)
 # ----------------------
 SIDEBAR_TITLE   = "Homy Sidebar"
 TOPBAR_TITLE    = "Homy Top Bar"
+BOTTOMBAR_TITLE = "Homy Bottom Bar"
 WALLPAPER_TITLE = "Homy Wallpaper"
 SIDEBAR_URL     = "http://127.0.0.1:47811/group?name="
 
@@ -362,10 +362,16 @@ def assign_startup_group(client):
         client.static(screen.index, x=screen.x, y=screen.y, width=screen.width, height=BAR_HEIGHT)
         logger.warning("homy: top bar pinned over the top gap")
         return
+    if client.name == BOTTOMBAR_TITLE:
+        screen = qtile.current_screen
+        client.static(screen.index, x=screen.x, y=screen.y + screen.height - BAR_HEIGHT,
+                      width=screen.width, height=BAR_HEIGHT)
+        logger.warning("homy: bottom bar pinned over the bottom gap")
+        return
     if client.name == WALLPAPER_TITLE:
         screen = qtile.current_screen
         client.static(screen.index, x=screen.x, y=screen.y,
-                      width=screen.width, height=screen.height - BAR_HEIGHT)
+                      width=screen.width, height=screen.height)
         static = qtile.windows_map.get(client.wid)
         if static is not None:
             static.keep_below(True)
@@ -374,7 +380,7 @@ def assign_startup_group(client):
             # them) would stay on top of the bars. Put it at the very bottom of the
             # X stack instead, below everything.
             static.window.configure(stackmode=xcffib.xproto.StackMode.Below)
-        logger.warning("homy: wallpaper pinned above the bottom bar, at the bottom of the stack")
+        logger.warning("homy: wallpaper pinned over the whole screen, at the bottom of the stack")
         return
     app_id = _homy_app_id(client)
     if app_id:
@@ -512,22 +518,28 @@ TOP_BAR = (
     if _hostname == "pi" else bar.Gap(BAR_HEIGHT)
 )
 
+# Bottom edge: the Rive bottom bar (apps/shell), like TOP_BAR.
+BOTTOM_BAR = (
+    bar.Bar(
+        [
+            SvgButton(icon("Bluetooth_Button.svg"), icon("Bluetooth_Button_Highlighted.svg"),
+                lazy.group["7"].toscreen(),
+                icon_width=BTN_W, icon_height=BTN_H),
+            SvgButton(icon("SystemButton.svg"), icon("SystemButtonPushed.svg"),
+                lazy.group["6"].toscreen(),
+                icon_width=BTN_W, icon_height=BTN_H),
+            widget.Spacer(),
+        ],
+        BAR_HEIGHT,
+        background=colors["bg"],
+    )
+    if _hostname == "pi" else bar.Gap(BAR_HEIGHT)
+)
+
 screens = [
     Screen(
         top=TOP_BAR,
-        bottom=bar.Bar(
-            [
-                SvgButton(icon("Bluetooth_Button.svg"), icon("Bluetooth_Button_Highlighted.svg"),
-                    lazy.group["7"].toscreen(),
-                    icon_width=BTN_W, icon_height=BTN_H),
-                SvgButton(icon("SystemButton.svg"), icon("SystemButtonPushed.svg"),
-                    lazy.group["6"].toscreen(),
-                    icon_width=BTN_W, icon_height=BTN_H),
-                widget.Spacer(),
-            ],
-            BAR_HEIGHT,
-            background=colors["bg"],
-        ),
+        bottom=BOTTOM_BAR,
         right=RIGHT_BAR,
     ),
 ]

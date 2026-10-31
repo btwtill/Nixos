@@ -124,6 +124,7 @@ function startNavSurface(opts) {
         const v = active.value;
         if (v !== hostValue && v !== reported) { reported = v; emit("navigate", v); }
       });
+      if (opts.onLoad) opts.onLoad(r);
     },
   });
 }

@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Bottom bar surface: the BottomBar artboard of bottombar.riv (Bluetooth, System, clock). -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Homy Bottom Bar</title>
+<style>
+  /* transparent: only the Rive artboard draws */
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="shell.js"></script>
+<script>
+// BottomBarInterface.time = "HH:MM" (local time), set on every minute change.
+function startClock(r) {
+  const time = r.viewModelInstance.string("time");
+  if (!time) { emit("error", "BottomBar has no time — check the view model"); return; }
+  const tick = () => {
+    const now = new Date();
+    time.value = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    setTimeout(tick, 60000 - now.getSeconds() * 1000 - now.getMilliseconds() + 50);
+  };
+  tick();
+}
+
+// layout: the artboard takes the window's size (full screen width × 40)
+startNavSurface({ riv: "bottombar", artboard: "BottomBar", fit: "layout", onLoad: startClock });
+</script>
+</body>
+</html>

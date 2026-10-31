@@ -203,7 +203,10 @@ process sharing one Chromium (each further surface costs a page, not a browser):
 - *topbar* — `topbar.riv`, pinned over the top edge: Terminal (group 5), app
   menu, Wi-Fi (group 8), highlighted the same way. Replaces Qtile's top bar
   (which stays as an empty gap); the Pi 3B+ keeps the old SVG bar.
-- *wallpaper* — `wallpaper.riv`, full screen behind every window; its colour is
+- *bottombar* — `bottombar.riv`, pinned over the bottom edge: Bluetooth
+  (group 7), System (group 6) and the clock (local time, written by the page
+  every minute). Replaces Qtile's bottom bar the same way.
+- *wallpaper* — `wallpaper.riv`, the whole screen behind every window (and the bars); its colour is
   the theme's `wallpaper` token, its size the screen.
 
 To see its output: `pkill -f homy-shell; DISPLAY=:0 homy-shell` (or only one
