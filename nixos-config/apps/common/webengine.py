@@ -25,10 +25,7 @@ import os
 from pathlib import Path
 
 # Let Chromium use the GPU even where its blocklist says otherwise.
-# --process-per-site: pages of one site share one renderer process instead of
-# one each — the shell's surfaces all come from 127.0.0.1:47811, so they run in
-# a single renderer (each costs ~40–80 MB otherwise).
-BASE_FLAGS = ["--ignore-gpu-blocklist", "--enable-gpu-rasterization", "--process-per-site"]
+BASE_FLAGS = ["--ignore-gpu-blocklist", "--enable-gpu-rasterization"]
 
 # Kernel drivers of real GPUs that can share frames with Qt (dma_buf).
 REAL_GPU_DRIVERS = {"v3d", "i915", "xe", "amdgpu", "radeon", "msm", "panfrost", "lima", "etnaviv"}
