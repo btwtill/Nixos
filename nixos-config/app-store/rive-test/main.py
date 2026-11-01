@@ -58,6 +58,14 @@ CHROMIUM_FLAGS = ["--ignore-gpu-blocklist", "--enable-gpu-rasterization"]
 # Kernel drivers of real GPUs whose rendered frames QtWebEngine can share with
 # Qt (dma_buf). VMs (virtio_gpu, …) can't, which leaves the window empty.
 REAL_GPU_DRIVERS = {"v3d", "i915", "xe", "amdgpu", "radeon", "msm", "panfrost", "lima", "etnaviv"}
+# Raspberry Pi GPUs: Chromium's default path goes through their desktop OpenGL
+# (3.1), which can't do WebGL2 ("ES3 is blocklisted…" → canvas, no feathers);
+# ANGLE on their OpenGL ES 3.1 can. Same as apps/common/webengine.py.
+GLES_DRIVERS = {"v3d", "vc4"}
+
+
+def gpu_drivers() -> set[str]:
+    return {(node / "device" / "driver").resolve().name for node in Path("/sys/class/drm").glob("renderD*")}
 
 
 def web_gpu_enabled() -> bool:
@@ -66,10 +74,7 @@ def web_gpu_enabled() -> bool:
     forced = os.environ.get("HOMY_WEB_GPU")
     if forced in ("0", "1"):
         return forced == "1"
-    for node in Path("/sys/class/drm").glob("renderD*"):
-        if (node / "device" / "driver").resolve().name in REAL_GPU_DRIVERS:
-            return True
-    return False
+    return bool(gpu_drivers() & REAL_GPU_DRIVERS)
 
 
 def log(msg: str):
@@ -184,6 +189,8 @@ def run_webengine(url: str):
         os.environ.setdefault("QSG_RHI_BACKEND", "opengl")
         os.environ.setdefault("QT_XCB_GL_INTEGRATION", "xcb_egl")
         flags.append("--disable-features=Vulkan")
+        if gpu_drivers() & GLES_DRIVERS:
+            flags += ["--use-gl=angle", "--use-angle=gles-egl"]
     else:
         # software compositing (no dma_buf) but WebGL kept on SwiftShader: Rive's
         # WebGL2 renderer is the only one that draws feathers and blend modes
