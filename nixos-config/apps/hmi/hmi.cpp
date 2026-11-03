@@ -22,6 +22,8 @@
 //         hand it to the window as a plain X11 image. For the Pi 5 under X11:
 //         its GPU renders fine, but OpenGL ES window surfaces never show up
 //         there (not even Mesa's es2gears). Costs a copy per changed frame.
+// HOMY_HMI_GLDEBUG=1: print the GL extensions and every driver debug message
+// (KHR_debug) plus glGetError after each frame, to stderr.
 // --msaa N (or HOMY_HMI_MSAA): give Rive a multisampled target with N samples.
 //   Where the GPU has none of Rive's "interlock" modes (Pi 5: V3D), Rive draws
 //   in depthStencil mode with MSAA and otherwise sets up the MSAA buffer itself.
@@ -83,6 +85,11 @@ struct Options
 void out(const std::string& line)
 {
   std::cout << line << std::endl;   // endl flushes: the controller reads lines
+}
+
+void GLAD_API_PTR glDebug(GLenum, GLenum, GLuint, GLenum, GLsizei, const GLchar* message, const void*)
+{
+  std::cerr << "gl: " << message << std::endl;
 }
 
 // Startup progress on stderr (the controller only reads stdout), so a crash
@@ -195,6 +202,26 @@ int main(int argc, char** argv)
   }
   step(std::string("OpenGL loaded: ") + reinterpret_cast<const char*>(glGetString(GL_VERSION)) +
        " / " + reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+  const bool glDebugOn = std::getenv("HOMY_HMI_GLDEBUG") != nullptr;
+  if (glDebugOn)
+  {
+    GLint count = 0;
+    glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+    std::string extensions;
+    for (GLint i = 0; i < count; ++i)
+      extensions += std::string(" ") + reinterpret_cast<const char*>(glGetStringi(GL_EXTENSIONS, i));
+    step("GL extensions:" + extensions);
+    if (GLAD_GL_KHR_debug)
+    {
+      glEnable(GL_DEBUG_OUTPUT_KHR);
+      glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR);
+      glDebugMessageControlKHR(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+      glDebugMessageCallbackKHR(&glDebug, nullptr);
+      step("GL debug output on");
+    }
+    else
+      step("no KHR_debug: only glGetError after each frame");
+  }
   auto renderContext = gpu::RenderContextGLImpl::MakeContext();
   if (!renderContext)
   {
@@ -492,6 +519,9 @@ int main(int argc, char** argv)
     renderer.restore();
     renderContext->flush({.renderTarget = renderTarget.get()});
     glImpl->unbindGLInternalResources();
+    if (glDebugOn)
+      for (GLenum err; (err = glGetError()) != GL_NO_ERROR;)
+        std::cerr << "gl: glGetError 0x" << std::hex << err << std::dec << std::endl;
     if (!opt.copyPresent)
     {
       glfwSwapBuffers(window);
