@@ -14,9 +14,12 @@ pkgs.clangStdenv.mkDerivation {
 
   buildInputs = [ pkgs.glfw ];
 
+  # keep symbols while the native path is new: backtraces with function names
+  dontStrip = true;
+
   buildPhase = ''
     runHook preBuild
-    $CXX -std=c++20 -O2 -fno-rtti -fno-exceptions \
+    $CXX -std=c++20 -O2 -g -fno-rtti -fno-exceptions \
       -DRIVE_DESKTOP_GL -DWITH_RIVE_TEXT -DWITH_RIVE_LAYOUT -DYOGA_EXPORT= -DNDEBUG -DRELEASE \
       -I${rive}/include \
       hmi.cpp -o homy-hmi \

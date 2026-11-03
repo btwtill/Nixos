@@ -66,6 +66,13 @@ void out(const std::string& line)
   std::cout << line << std::endl;   // endl flushes: the controller reads lines
 }
 
+// Startup progress on stderr (the controller only reads stdout), so a crash
+// during setup shows how far it got.
+void step(const std::string& what)
+{
+  std::cerr << "homy-hmi: " << what << std::endl;
+}
+
 bool parseColor(const std::string& hex, ColorInt* argb)
 {
   if (hex.size() != 7 && hex.size() != 9)
@@ -152,12 +159,15 @@ int main(int argc, char** argv)
     return 1;
   }
   glfwMakeContextCurrent(window);
+  step("window + OpenGL ES context created");
   glfwSwapInterval(1);
   if (!gladLoadCustomLoader(reinterpret_cast<GLADloadfunc>(glfwGetProcAddress)))
   {
     out("error cannot load OpenGL");
     return 1;
   }
+  step(std::string("OpenGL loaded: ") + reinterpret_cast<const char*>(glGetString(GL_VERSION)) +
+       " / " + reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
   auto renderContext = gpu::RenderContextGLImpl::MakeContext();
   if (!renderContext)
   {
@@ -165,6 +175,8 @@ int main(int argc, char** argv)
     return 1;
   }
   auto* glImpl = renderContext->static_impl_cast<gpu::RenderContextGLImpl>();
+
+  step("Rive renderer ready");
 
   // ── the .riv: artboard, state machine, view model + global view models ────
   ImportResult result;
@@ -175,6 +187,7 @@ int main(int argc, char** argv)
     out("error cannot import " + opt.riv);
     return 1;
   }
+  step("file imported");
   std::unique_ptr<ArtboardInstance> artboard =
       opt.artboard.empty() ? file->artboardDefault() : file->artboardNamed(opt.artboard);
   if (!artboard)
@@ -201,6 +214,7 @@ int main(int argc, char** argv)
       globals[name] = global;
   }
   machine->bind();
+  step("artboard, state machine and view models bound");
 
   // ── layout: artboard → window ─────────────────────────────────────────────
   // The window manager may resize the window (Qtile pins the sidebar), so the
