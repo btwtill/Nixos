@@ -155,6 +155,12 @@
       # Build (on an aarch64-linux machine, e.g. the VM): nix build .#pi5Image
       pi5Image = pi5.config.system.build.sdImage;
 
+      # Rive's native renderer — buildable on its own while working on it:
+      #   nix build .#homy-hmi            (VM: the same nixpkgs as the system)
+      #   nix build .#homy-hmi-pi5        (the Pi 5's nixpkgs)
+      homy-hmi     = nixpkgs.legacyPackages.aarch64-linux.callPackage ./apps/hmi {};
+      homy-hmi-pi5 = pi5.pkgs.callPackage ./apps/hmi {};
+
       # Example launcher app, installable per user without a rebuild:
       #   nix profile install .#homy-hello   /   nix profile remove homy-app-hello
       homy-hello = import ./apps/launcher/mk-homy-app.nix {

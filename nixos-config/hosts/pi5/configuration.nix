@@ -138,10 +138,10 @@
     (pkgs.callPackage ../../apps/wifi {})
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
-    (pkgs.callPackage ../../ui {})            # homy-ui: all .riv files + Rive web runtime
-    (pkgs.callPackage ../../apps/shell {})     # homy-shell: Rive sidebar + wallpaper
-    picom                                     # compositor: transparent windows (shell)
-    chromium   # for web/Rive apps from the app store (e.g. app-store/rive-test)
+    (pkgs.callPackage ../../ui {})            # homy-ui: the .riv files
+    (pkgs.callPackage ../../apps/hmi {})       # homy-hmi: Rive's native renderer (OpenGL ES)
+    (pkgs.callPackage ../../apps/shell {})     # homy-shell: drives homy-hmi (sidebar)
+    picom                                     # compositor (fading)
     xsetroot
     (pkgs.callPackage ../../apps/system {
       hostLabel = "Raspberry Pi 5";

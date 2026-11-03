@@ -1,68 +1,51 @@
-"""Homy shell — the Rive-drawn parts of the desktop, in one process.
+"""Homy shell — connects the Rive HMI to the rest of the system.
 
-Every surface (sidebar, top bar, wallpaper, later the bottom bar) is a frameless QtWebEngine
-window playing one artboard of a .riv from the homy-ui package (HOMY_UI_DIR,
-set by the wrapper). They share one Chromium (browser, GPU and renderer
-processes), so a surface costs a page, not a whole browser. Qtile recognises
-the windows by title and pins them (dotfiles/qtile/config.py, "Homy shell").
+The drawing is done by homy-hmi (apps/hmi, Rive's native renderer on OpenGL
+ES); this process only drives it, one homy-hmi per surface, over its
+stdin/stdout:
 
-  sidebar    right edge, transparent. Tap → switch the Qtile group; Qtile
-             reports group changes to 127.0.0.1:47811/group?name=… → highlight.
-  topbar     top edge, full width, transparent. Terminal / app menu / Wi-Fi,
-             same tap + highlight scheme as the sidebar.
-  bottombar  bottom edge, full width, transparent. Bluetooth / System, same
-             scheme, plus the clock (the page writes the local time).
-  wallpaper  full screen, below every window. Width/height = the screen,
-             colour = the theme's "wallpaper" token.
-Colours of every surface follow the homy-theme service (web/shell.js).
+  homy-hmi → here    "number activeIndex 2"   a button was tapped
+  here → homy-hmi    "number activeIndex 2"   highlight the button of the group
+                     "color Theme/accent #…"  theme tokens (homy-theme)
+
+and connects it to the system: taps switch Qtile groups, Qtile reports group
+changes to 127.0.0.1:47811/group?name=… (its setgroup hook), colours follow
+the homy-theme service (127.0.0.1:47820/events).
+
+  sidebar    right edge. Qtile pins the window by its title.
 
     homy-shell [surface …]      default: all surfaces
 """
 from __future__ import annotations
 
-import functools
 import http.server
+import json
 import os
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
+import urllib.request
 from pathlib import Path
 
-# Shared modules live in apps/common (copied next to this file by default.nix).
-sys.path.append(str(Path(__file__).resolve().parent.parent / "common"))
-
-import webengine
-
-HERE = Path(__file__).resolve().parent
-WEB = HERE / "web"
 UI = Path(os.environ.get("HOMY_UI_DIR", "/run/current-system/sw/share/homy/ui"))
-PORT = 47811                      # the pages and Qtile's setgroup hook talk to this
+HMI = os.environ.get("HOMY_HMI", "homy-hmi")
+PORT = 47811                      # Qtile's setgroup hook talks to this
+THEME_EVENTS = "http://127.0.0.1:47820/events"
 
-BAR_HEIGHT = 40                   # Qtile's top/bottom bars (BAR_HEIGHT in the Qtile config)
-
-# name → window title (Qtile matches on it), size, behind everything?, transparent?
-# size None = the whole screen (the transparent bars lie on top of it), "bar" =
-# a top/bottom bar (screen width × BAR_HEIGHT); Qtile pins the
-# windows there.
+# surface → the homy-hmi window for it. Qtile pins windows by title.
 SURFACES = {
-    "wallpaper": {"title": "Homy Wallpaper", "size": None, "below": True, "transparent": False},
-    "sidebar":   {"title": "Homy Sidebar", "size": (180, 520), "below": False, "transparent": True},
-    "topbar":    {"title": "Homy Top Bar", "size": "bar", "below": False, "transparent": True},
-    "bottombar": {"title": "Homy Bottom Bar", "size": "bar", "below": False, "transparent": True},
+    "sidebar": {"riv": "sidebar", "artboard": "SideBar", "title": "Homy Sidebar",
+                "size": "180x520", "fit": "contain", "align": "topCenter"},
 }
 
-# Navigation surfaces: activeIndex (button position) → what a tap does.
+# Navigation: activeIndex (button position) → what a tap does.
 #   group name  switch to that Qtile group (and highlight the button there)
-#   "menu"      the app menu — Qtile's user hook "show_launcher" (it first moves
-#               stray app windows out of the menu's group)
 #   "power"     systemctl poweroff (sidebar button 4, like the old Shutdown button)
 NAV = {
     "sidebar": {0: "1", 1: "2", 2: "3", 3: "4", 4: "power"},
-    "topbar":  {0: "5", 1: "menu", 2: "8"},
-    "bottombar": {0: "7", 1: "6"},
 }
-MENU_GROUP = "9"                  # the menu's own group: highlights the menu button
 
 
 def log(msg: str):
@@ -71,54 +54,103 @@ def log(msg: str):
 
 def active_index(surface: str, group: str) -> int:
     """The button to highlight on a surface while `group` is shown (-1: none)."""
-    for index, action in NAV[surface].items():
-        if action == group or (action == "menu" and group == MENU_GROUP):
+    for index, action in NAV.get(surface, {}).items():
+        if action == group:
             return index
     return -1
 
 
 def navigate(surface: str, index: int):
-    """A button on a navigation surface was tapped (runs in a worker thread)."""
-    action = NAV[surface].get(index)
+    """A button on a surface was tapped."""
+    action = NAV.get(surface, {}).get(index)
     if action == "power":
         log("power button → systemctl poweroff")
         subprocess.run(["systemctl", "poweroff"])
-    elif action == "menu":
-        subprocess.run(["qtile", "cmd-obj", "-f", "fire_user_hook", "-a", "show_launcher"],
-                       capture_output=True)
     elif action:
         subprocess.run(["qtile", "cmd-obj", "-o", "group", action, "-f", "toscreen"], capture_output=True)
-    else:
+    elif index >= 0:
         log(f"no action for {surface} button {index}")
 
 
-class Handler(http.server.SimpleHTTPRequestHandler):
-    """Serves the pages (web/), the .riv files (/riv/) and the Rive runtime
-    (/vendor/) from one origin, plus /group for Qtile."""
-    extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
-                      ".wasm": "application/wasm", ".riv": "application/octet-stream"}
-    on_group = staticmethod(lambda name: None)
+class Surface:
+    """One homy-hmi process; restarted if it exits."""
 
-    def translate_path(self, path):
-        url_path = urllib.parse.urlparse(path).path
-        if url_path.startswith("/riv/"):
-            return str(UI / "riv" / Path(url_path).name)
-        if url_path.startswith("/vendor/"):
-            return str(UI / "runtime" / url_path[len("/vendor/"):])
-        return super().translate_path(path)
+    def __init__(self, name: str, spec: dict):
+        self.name, self.spec = name, spec
+        self.proc: subprocess.Popen | None = None
+        self.lock = threading.Lock()
+        self.index = active_index(name, "1")          # Qtile starts on group 1 = Home
+        self.theme: dict[str, str] = {}
 
-    def do_GET(self):
-        url = urllib.parse.urlparse(self.path)
-        if url.path == "/group":                     # from Qtile's setgroup hook
-            name = urllib.parse.parse_qs(url.query).get("name", [""])[0]
-            self.send_response(204)
-            self.end_headers()
-            self.on_group(name)
-            return
-        super().do_GET()
+    def start(self):
+        threading.Thread(target=self._run, daemon=True).start()
 
-    def log_message(self, *args):
-        pass
+    def send(self, line: str):
+        with self.lock:
+            if self.proc and self.proc.poll() is None:
+                try:
+                    self.proc.stdin.write(line + "\n")
+                    self.proc.stdin.flush()
+                except OSError:
+                    pass
+
+    def set_active(self, index: int):
+        self.index = index
+        self.send(f"number activeIndex {index}")
+
+    def set_theme(self, tokens: dict[str, str]):
+        self.theme = tokens
+        for name, hex_ in tokens.items():
+            self.send(f"color Theme/{name} {hex_}")
+        if "wallpaper" in tokens:
+            self.send(f"background {tokens['wallpaper'][:7]}")
+
+    def _run(self):
+        s = self.spec
+        cmd = [HMI, "--riv", str(UI / "riv" / f"{s['riv']}.riv"), "--artboard", s["artboard"],
+               "--title", s["title"], "--size", s["size"], "--fit", s["fit"], "--align", s["align"]]
+        while True:
+            started = time.monotonic()
+            with self.lock:
+                self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                             text=True, bufsize=1)
+            for line in self.proc.stdout:
+                self._handle(line.strip())
+            log(f"{self.name}: homy-hmi exited ({self.proc.wait()})")
+            # restart, but not in a tight loop if it can't start at all
+            time.sleep(1 if time.monotonic() - started > 10 else 10)
+
+    def _handle(self, line: str):
+        kind, _, rest = line.partition(" ")
+        if kind == "ready":
+            log(f"{self.name}: ready ({rest})")
+            self.send("watch activeIndex")
+            self.set_active(self.index)
+            self.set_theme(self.theme)
+        elif kind == "number" and rest.startswith("activeIndex "):
+            index = int(float(rest.split()[1]))
+            if index != self.index:
+                self.index = index
+                threading.Thread(target=navigate, args=(self.name, index), daemon=True).start()
+        else:
+            log(f"{self.name}: {line}")
+
+
+def follow_theme(surfaces: list[Surface]):
+    """Server-Sent Events from homy-theme: the active theme now and on change."""
+    while True:
+        try:
+            with urllib.request.urlopen(THEME_EVENTS) as events:
+                for raw in events:
+                    line = raw.decode().strip()
+                    if line.startswith("data: "):
+                        theme = json.loads(line[6:])
+                        log(f"theme: {theme['id']}")
+                        for s in surfaces:
+                            s.set_theme(theme["tokens"])
+        except Exception as e:
+            log(f"theme service unavailable ({e}); retrying")
+        time.sleep(3)
 
 
 def main():
@@ -126,99 +158,35 @@ def main():
     unknown = [s for s in wanted if s not in SURFACES]
     if unknown:
         sys.exit(f"homy-shell: unknown surface(s) {unknown}; known: {list(SURFACES)}")
+    surfaces = [Surface(name, SURFACES[name]) for name in wanted]
 
-    gpu = webengine.configure()
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            url = urllib.parse.urlparse(self.path)
+            if url.path != "/group":
+                self.send_error(404)
+                return
+            group = urllib.parse.parse_qs(url.query).get("name", [""])[0]
+            self.send_response(204)
+            self.end_headers()
+            for s in surfaces:
+                s.set_active(active_index(s.name, group))
 
-    from PyQt6.QtCore import QObject, Qt, QUrl, pyqtSignal
-    from PyQt6.QtWebEngineCore import QWebEnginePage
-    from PyQt6.QtWebEngineWidgets import QWebEngineView
-    from PyQt6.QtWidgets import QApplication, QMainWindow
+        def log_message(self, *args):
+            pass
 
     # One shell per session: the fixed port doubles as the lock.
     try:
-        server = http.server.ThreadingHTTPServer(
-            ("127.0.0.1", PORT), functools.partial(Handler, directory=str(WEB)))
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
         log(f"port {PORT} in use — the shell is already running")
         sys.exit(0)
 
-    class Bridge(QObject):
-        group_changed = pyqtSignal(str)      # from the HTTP thread to the Qt thread
-
-    app = QApplication(sys.argv[:1])
-    app.setApplicationName("Homy Shell")
-    bridge = Bridge()
-    # per navigation surface: its page, loaded yet?, the button to highlight
-    nav = {s: {"index": active_index(s, "1"), "loaded": False, "page": None}   # Qtile starts on group 1
-           for s in NAV if s in wanted}
-
-    class Page(QWebEnginePage):
-        def __init__(self, surface: str, parent):
-            super().__init__(parent)
-            self.surface = surface
-
-        def javaScriptConsoleMessage(self, level, message, line, source):
-            if not message.startswith("homy:"):
-                if level != QWebEnginePage.JavaScriptConsoleMessageLevel.InfoMessageLevel:
-                    log(f"{self.surface}: js: {message} ({source}:{line})")
-                return
-            kind, _, data = message[5:].partition(" ")
-            if self.surface in nav and kind == "navigate":
-                threading.Thread(target=navigate, args=(self.surface, int(float(data))), daemon=True).start()
-                return
-            if self.surface in nav and kind == "loaded":
-                nav[self.surface]["loaded"] = True
-                self.runJavaScript(f"homy.setActive({nav[self.surface]['index']})")
-            log(f"{self.surface}: {kind} {data}")
-
-    def on_group(name: str):
-        for surface, state in nav.items():
-            state["index"] = active_index(surface, name)
-            if state["loaded"]:
-                state["page"].runJavaScript(f"homy.setActive({state['index']})")
-
-    bridge.group_changed.connect(on_group)
-    Handler.on_group = staticmethod(bridge.group_changed.emit)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-
-    screen = app.primaryScreen().geometry()
-    windows = []
-    for name in wanted:
-        spec = SURFACES[name]
-        win = QMainWindow()
-        win.setWindowTitle(spec["title"])
-        flags = Qt.WindowType.FramelessWindowHint
-        if spec["below"]:
-            # _NET_WM_STATE_BELOW, and taps pass through: with bring_front_click a
-            # tap on the wallpaper would otherwise raise it over everything.
-            flags |= Qt.WindowType.WindowStaysOnBottomHint | Qt.WindowType.WindowTransparentForInput
-        win.setWindowFlags(flags)
-        view = QWebEngineView()
-        page = Page(name, view)
-        view.setPage(page)
-        if spec["transparent"]:
-            # Only what the Rive file draws is visible (needs the compositor —
-            # picom — running, otherwise X11 shows black there).
-            win.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            view.setStyleSheet("background: transparent;")
-            page.setBackgroundColor(Qt.GlobalColor.transparent)
-        else:
-            page.setBackgroundColor(Qt.GlobalColor.black)
-        if name in nav:
-            nav[name]["page"] = page
-        view.setUrl(QUrl(f"http://127.0.0.1:{PORT}/{name}.html?renderer=webgl2"))
-        win.setCentralWidget(view)
-        if spec["size"] == "bar":
-            w, h = screen.width(), BAR_HEIGHT
-        else:
-            w, h = spec["size"] or (screen.width(), screen.height())
-        win.setFixedSize(w, h)
-        win.show()
-        windows.append(win)
-
-    log(f"surfaces: {', '.join(wanted)} — rendering: {'GPU' if gpu else 'software'} (webgl2)")
-    sys.exit(app.exec())
+    for s in surfaces:
+        s.start()
+    threading.Thread(target=follow_theme, args=(surfaces,), daemon=True).start()
+    log(f"surfaces: {', '.join(wanted)} (homy-hmi)")
+    server.serve_forever()
 
 
 if __name__ == "__main__":

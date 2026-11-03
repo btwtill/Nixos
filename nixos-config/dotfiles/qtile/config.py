@@ -14,7 +14,6 @@ import os
 import signal
 import urllib.parse
 import urllib.request
-import xcffib.xproto  #type: ignore
 
 import socket
 _hostname = socket.gethostname()
@@ -312,29 +311,13 @@ def _show_launcher(qtile):
             _to_app_group(w, app_id)
     launcher.toscreen()
 
-@hook.subscribe.user("show_launcher")
-def show_launcher_hook():
-    """The Rive top bar's menu button (homy-shell runs
-    `qtile cmd-obj -f fire_user_hook -a show_launcher`)."""
-    _show_launcher(qtile)
-
 # ----------------------
-# Homy shell (apps/shell) — the Rive-drawn surfaces, recognised by title:
+# Homy shell (apps/shell → homy-hmi, Rive's native renderer), by title:
 #   sidebar    pinned over the right edge as a static (untiled) window;
 #              RIGHT_BAR (a Gap) keeps the space free and draws nothing.
 #              Group changes are reported to it to highlight the matching button.
-#   top bar    pinned over the top edge the same way (TOP_BAR is a Gap); it gets
-#              the same group reports (one /group call serves every surface).
-#   bottom bar pinned over the bottom edge the same way (BOTTOM_BAR is a Gap).
-#   wallpaper  pinned over the whole screen, below every other window: the
-#              bars are transparent, and with only xsetroot's colour behind
-#              them picom draws black. (Qtile's own bar windows would end up
-#              under it — there are none on hosts with the shell.)
 # ----------------------
 SIDEBAR_TITLE   = "Homy Sidebar"
-TOPBAR_TITLE    = "Homy Top Bar"
-BOTTOMBAR_TITLE = "Homy Bottom Bar"
-WALLPAPER_TITLE = "Homy Wallpaper"
 SIDEBAR_URL     = "http://127.0.0.1:47811/group?name="
 
 @hook.subscribe.setgroup
@@ -356,31 +339,6 @@ def assign_startup_group(client):
         client.static(screen.index, x=screen.x + screen.width - BAR_WIDTH, y=screen.y + BAR_HEIGHT,
                       width=BAR_WIDTH, height=screen.height - 2 * BAR_HEIGHT)
         logger.warning("homy: sidebar pinned over the right bar")
-        return
-    if client.name == TOPBAR_TITLE:
-        screen = qtile.current_screen
-        client.static(screen.index, x=screen.x, y=screen.y, width=screen.width, height=BAR_HEIGHT)
-        logger.warning("homy: top bar pinned over the top gap")
-        return
-    if client.name == BOTTOMBAR_TITLE:
-        screen = qtile.current_screen
-        client.static(screen.index, x=screen.x, y=screen.y + screen.height - BAR_HEIGHT,
-                      width=screen.width, height=BAR_HEIGHT)
-        logger.warning("homy: bottom bar pinned over the bottom gap")
-        return
-    if client.name == WALLPAPER_TITLE:
-        screen = qtile.current_screen
-        client.static(screen.index, x=screen.x, y=screen.y,
-                      width=screen.width, height=screen.height)
-        static = qtile.windows_map.get(client.wid)
-        if static is not None:
-            static.keep_below(True)
-            # keep_below only orders it among managed windows — the bars are
-            # Qtile-internal and not part of that, so the wallpaper (created after
-            # them) would stay on top of the bars. Put it at the very bottom of the
-            # X stack instead, below everything.
-            static.window.configure(stackmode=xcffib.xproto.StackMode.Below)
-        logger.warning("homy: wallpaper pinned over the whole screen, at the bottom of the stack")
         return
     app_id = _homy_app_id(client)
     if app_id:
@@ -495,8 +453,8 @@ RIGHT_BAR = (
     if _hostname == "pi" else bar.Gap(BAR_WIDTH)
 )
 
-# Top edge: the Rive top bar (apps/shell) on hosts with the shell — the bar
-# only reserves the space, like RIGHT_BAR. The Pi 3B+ keeps the SVG buttons.
+# Top and bottom edge: Qtile's own bars with the SVG buttons (on the
+# native-rive branch only the sidebar is Rive so far).
 TOP_BAR = (
     bar.Bar(
         [
@@ -515,10 +473,8 @@ TOP_BAR = (
         BAR_HEIGHT,
         background=colors["bg"],
     )
-    if _hostname == "pi" else bar.Gap(BAR_HEIGHT)
 )
 
-# Bottom edge: the Rive bottom bar (apps/shell), like TOP_BAR.
 BOTTOM_BAR = (
     bar.Bar(
         [
@@ -533,7 +489,6 @@ BOTTOM_BAR = (
         BAR_HEIGHT,
         background=colors["bg"],
     )
-    if _hostname == "pi" else bar.Gap(BAR_HEIGHT)
 )
 
 screens = [

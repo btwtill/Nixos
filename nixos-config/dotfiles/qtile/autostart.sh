@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 
 setxkbmap de
-# Plain UI grey as the X background. On the VM / Pi 5 the shell's Rive
-# wallpaper covers it moments later; the Pi 3B+ keeps it.
+# Plain UI grey as the X background.
 xsetroot -solid "#1e1e1e"
 
 # On-screen keyboard service (hidden until an app runs `osk show`)
 if command -v osk &>/dev/null; then
   osk daemon &
 fi
-# Rive-drawn desktop surfaces — sidebar, top + bottom bar, wallpaper (pinned by the Qtile config)
+# Rive HMI (homy-shell → homy-hmi): the sidebar, pinned by the Qtile config.
+# Log: ~/.local/state/homy-shell.log
 if command -v homy-shell &>/dev/null; then
-  homy-shell &
+  mkdir -p ~/.local/state
+  homy-shell > ~/.local/state/homy-shell.log 2>&1 &
 fi
 if command -v picom &>/dev/null; then
   picom &
