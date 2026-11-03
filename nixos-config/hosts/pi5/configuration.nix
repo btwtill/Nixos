@@ -53,6 +53,11 @@
   services.xserver.xkb.layout = "de";
   services.xserver.windowManager.qtile.enable = true;
 
+  # homy-hmi: the GPU renders fine, but OpenGL ES window surfaces never reach
+  # the screen under X11 here (not even Mesa's es2gears) — render offscreen and
+  # hand the frame to X11 as an image instead (apps/hmi/hmi.cpp, --present).
+  environment.sessionVariables.HOMY_HMI_PRESENT = "copy";
+
   services.getty.autologinUser = "defaultUser";
 
   # The Pi 5 has no 3.5 mm jack — audio goes out over HDMI or a USB/I2S DAC.

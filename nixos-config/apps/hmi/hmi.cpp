@@ -4,7 +4,7 @@
 //
 //   homy-hmi --riv FILE [--artboard NAME] [--title TITLE] [--size WxH]
 //            [--fit contain|layout|cover|fill] [--align center|topCenter]
-//            [--background #RRGGBB]
+//            [--background #RRGGBB] [--present gl|copy]
 //
 // stdin                                   stdout
 //   number <name> <value>                   ready <artboard> <GL renderer>
@@ -15,6 +15,13 @@
 //
 // <name> is a property of the artboard's view model; color addresses a global
 // view model (e.g. Theme/accent). Draws only while something changes.
+//
+// --present (or HOMY_HMI_PRESENT): how a finished frame reaches the window.
+//   gl    swap the OpenGL ES window surface (default)
+//   copy  render into an offscreen framebuffer on the GPU, read it back and
+//         hand it to the window as a plain X11 image. For the Pi 5 under X11:
+//         its GPU renders fine, but OpenGL ES window surfaces never show up
+//         there (not even Mesa's es2gears). Costs a copy per changed frame.
 
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/artboard.hpp"
@@ -33,9 +40,16 @@
 #include "glad_custom.h"
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+// from GLFW's glfw3native.h, which would also want the Xrandr headers
+extern "C" Display* glfwGetX11Display(void);
+extern "C" ::Window glfwGetX11Window(GLFWwindow* window);
 
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <fstream>
@@ -59,6 +73,7 @@ struct Options
   Fit fit = Fit::contain;
   Alignment align = Alignment::center;
   ColorInt background = 0xff1e1e1e;
+  bool copyPresent = false;
 };
 
 void out(const std::string& line)
@@ -101,6 +116,7 @@ Options parseArgs(int argc, char** argv)
     else if (k == "--align")
       o.align = v == "topCenter" ? Alignment::topCenter : Alignment::center;
     else if (k == "--background") parseColor(v, &o.background);
+    else if (k == "--present") o.copyPresent = v == "copy";
   }
   return o;
 }
@@ -126,6 +142,8 @@ void readStdin()
 int main(int argc, char** argv)
 {
   Options opt = parseArgs(argc, argv);
+  if (const char* present = std::getenv("HOMY_HMI_PRESENT"))
+    opt.copyPresent = opt.copyPresent || std::string(present) == "copy";
   if (opt.riv.empty())
   {
     std::fprintf(stderr, "usage: homy-hmi --riv FILE [--artboard NAME] …\n");
@@ -226,6 +244,15 @@ int main(int argc, char** argv)
   // sizes are re-read every frame.
   int fbWidth = 0, fbHeight = 0;
   rcp<gpu::FramebufferRenderTargetGL> renderTarget;
+  // copy present: offscreen framebuffer + an X11 image of the same size
+  GLuint fbo = 0, colorBuffer = 0, depthStencil = 0;
+  Display* xDisplay = opt.copyPresent ? glfwGetX11Display() : nullptr;
+  ::Window xWindow = opt.copyPresent ? glfwGetX11Window(window) : 0;
+  GC xGC = opt.copyPresent ? XCreateGC(xDisplay, xWindow, 0, nullptr) : nullptr;
+  XImage* xImage = nullptr;
+  std::vector<uint8_t> pixels;            // RGBA from the GPU, bottom row first
+  if (opt.copyPresent)
+    step("present: copy (offscreen framebuffer → X11 image)");
   auto resize = [&]() {
     int w, h, fw, fh;
     glfwGetWindowSize(window, &w, &h);
@@ -233,7 +260,40 @@ int main(int argc, char** argv)
     if (renderTarget && fw == fbWidth && fh == fbHeight && w == opt.width && h == opt.height)
       return false;
     opt.width = w, opt.height = h, fbWidth = fw, fbHeight = fh;
-    renderTarget = make_rcp<gpu::FramebufferRenderTargetGL>(fbWidth, fbHeight, 0, 0);
+    if (opt.copyPresent)
+    {
+      if (fbo)
+      {
+        glDeleteFramebuffers(1, &fbo);
+        glDeleteRenderbuffers(1, &colorBuffer);
+        glDeleteRenderbuffers(1, &depthStencil);
+      }
+      glGenFramebuffers(1, &fbo);
+      glGenRenderbuffers(1, &colorBuffer);
+      glGenRenderbuffers(1, &depthStencil);
+      glBindRenderbuffer(GL_RENDERBUFFER, colorBuffer);
+      glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, fbWidth, fbHeight);
+      glBindRenderbuffer(GL_RENDERBUFFER, depthStencil);
+      glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, fbWidth, fbHeight);
+      glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+      glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, colorBuffer);
+      glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencil);
+      if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        out("error offscreen framebuffer incomplete");
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      pixels.assign(static_cast<size_t>(fbWidth) * fbHeight * 4, 0);
+      if (xImage)
+      {
+        xImage->data = nullptr;           // the buffer is ours, not Xlib's
+        XDestroyImage(xImage);
+      }
+      XWindowAttributes attrs;
+      XGetWindowAttributes(xDisplay, xWindow, &attrs);
+      xImage = XCreateImage(xDisplay, attrs.visual, attrs.depth, ZPixmap, 0,
+                            reinterpret_cast<char*>(malloc(static_cast<size_t>(fbWidth) * fbHeight * 4)),
+                            fbWidth, fbHeight, 32, 0);
+    }
+    renderTarget = make_rcp<gpu::FramebufferRenderTargetGL>(fbWidth, fbHeight, fbo, 0);
     glViewport(0, 0, fbWidth, fbHeight);
     if (opt.fit == Fit::layout)
     {
@@ -257,6 +317,10 @@ int main(int argc, char** argv)
     bool dirty = true;
   } ctx{machine.get(), viewTransform};
   glfwSetWindowUserPointer(window, &ctx);
+  // exposed again (mapped, uncovered): an X11 image isn't kept by the server
+  glfwSetWindowRefreshCallback(window, [](GLFWwindow* w) {
+    static_cast<Ctx*>(glfwGetWindowUserPointer(w))->dirty = true;
+  });
   glfwSetCursorPosCallback(window, [](GLFWwindow* w, double, double) {
     auto* c = static_cast<Ctx*>(glfwGetWindowUserPointer(w));
     double x, y;
@@ -401,7 +465,24 @@ int main(int argc, char** argv)
     renderer.restore();
     renderContext->flush({.renderTarget = renderTarget.get()});
     glImpl->unbindGLInternalResources();
-    glfwSwapBuffers(window);
+    if (!opt.copyPresent)
+    {
+      glfwSwapBuffers(window);
+      continue;
+    }
+    // GPU → memory (RGBA, bottom row first) → X11 image (BGRX, top row first)
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glReadPixels(0, 0, fbWidth, fbHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    auto* dst = reinterpret_cast<uint32_t*>(xImage->data);
+    for (int y = 0; y < fbHeight; ++y)
+    {
+      const uint8_t* src = pixels.data() + static_cast<size_t>(fbHeight - 1 - y) * fbWidth * 4;
+      for (int x = 0; x < fbWidth; ++x, src += 4)
+        *dst++ = 0xff000000u | (uint32_t(src[0]) << 16) | (uint32_t(src[1]) << 8) | src[2];
+    }
+    XPutImage(xDisplay, xWindow, xGC, xImage, 0, 0, 0, 0, fbWidth, fbHeight);
+    XFlush(xDisplay);
   }
   glfwTerminate();
   return 0;

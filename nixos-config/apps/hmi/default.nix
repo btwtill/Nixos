@@ -5,14 +5,14 @@
 # homy-hmi — Rive's native renderer on OpenGL ES in a window, driven over
 # stdin/stdout (see hmi.cpp). GLFW opens the X11 window and the EGL context;
 # OpenGL itself is loaded at runtime (glad), so libEGL/libGLESv2 come from the
-# system's Mesa (/run/opengl-driver).
+# system's Mesa (/run/opengl-driver). libX11 for --present copy (Pi 5).
 pkgs.clangStdenv.mkDerivation {
   pname   = "homy-hmi";
   version = "0.1.0";
 
   src = ./.;
 
-  buildInputs = [ pkgs.glfw ];
+  buildInputs = [ pkgs.glfw pkgs.xorg.libX11 ];   # libX11: --present copy
 
   # keep symbols while the native path is new: backtraces with function names
   dontStrip = true;
@@ -27,7 +27,7 @@ pkgs.clangStdenv.mkDerivation {
       -I${rive}/include \
       hmi.cpp -o homy-hmi \
       -L${rive}/lib -Wl,--start-group -lrive_pls_renderer -lrive -lrive_yoga -lrive_harfbuzz -lrive_sheenbidi -Wl,--end-group \
-      -lglfw -ldl -lpthread
+      -lglfw -lX11 -ldl -lpthread
     runHook postBuild
   '';
 
