@@ -17,9 +17,12 @@ pkgs.clangStdenv.mkDerivation {
   # keep symbols while the native path is new: backtraces with function names
   dontStrip = true;
 
+  # C++17 like rive-runtime: with C++20, header-inline statics such as
+  # ComponentBase::name()'s empty string become read-only constants, and the
+  # library (C++17, initialising them at runtime) crashes writing to them.
   buildPhase = ''
     runHook preBuild
-    $CXX -std=c++20 -O2 -g -fno-rtti -fno-exceptions \
+    $CXX -std=c++17 -O2 -g -fno-rtti -fno-exceptions \
       -DRIVE_DESKTOP_GL -DWITH_RIVE_TEXT -DWITH_RIVE_LAYOUT -DYOGA_EXPORT= -DNDEBUG -DRELEASE \
       -I${rive}/include \
       hmi.cpp -o homy-hmi \
