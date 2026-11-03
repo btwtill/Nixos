@@ -195,6 +195,7 @@ int main(int argc, char** argv)
     out("error no artboard '" + opt.artboard + "'");
     return 1;
   }
+  step("artboard '" + artboard->name() + "'");
   std::unique_ptr<StateMachineInstance> machine = artboard->defaultStateMachine();
   if (!machine)
     machine = artboard->stateMachineAt(0);
@@ -203,16 +204,20 @@ int main(int argc, char** argv)
     out("error artboard has no state machine");
     return 1;
   }
+  step("state machine '" + machine->name() + "'");
   rcp<ViewModelInstance> vmi = file->createDefaultViewModelInstance(artboard.get());
+  step(vmi ? "view model instance created" : "artboard has no view model");
   std::map<std::string, rcp<ViewModelInstance>> globals;
   if (vmi)
     machine->setViewModelInstance(vmi);
   for (const std::string& name : file->globalViewModelNames())
   {
+    step("global view model '" + name + "'");
     auto global = file->createDefaultViewModelInstance(file->viewModel(name));
     if (global && machine->setGlobalViewModelInstance(name, global))
       globals[name] = global;
   }
+  step("binding");
   machine->bind();
   step("artboard, state machine and view models bound");
 
