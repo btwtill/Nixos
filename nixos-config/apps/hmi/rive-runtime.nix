@@ -55,7 +55,8 @@ pkgs.clangStdenv.mkDerivation {
 
   buildPhase = ''
     runHook preBuild
-    make -C out/release -j$NIX_BUILD_CORES config=release ${pkgs.lib.concatStringsSep " " libs}
+    # one premake configuration ("default"); release was chosen by --config above
+    make -C out/release -j$NIX_BUILD_CORES ${pkgs.lib.concatStringsSep " " libs}
     runHook postBuild
   '';
 
