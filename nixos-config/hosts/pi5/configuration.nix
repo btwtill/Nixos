@@ -53,10 +53,11 @@
   services.xserver.xkb.layout = "de";
   services.xserver.windowManager.qtile.enable = true;
 
-  # homy-hmi: the GPU renders fine, but OpenGL ES window surfaces never reach
-  # the screen under X11 here (not even Mesa's es2gears) — render offscreen and
-  # hand the frame to X11 as an image instead (apps/hmi/hmi.cpp, --present).
-  environment.sessionVariables.HOMY_HMI_PRESENT = "copy";
+  # homy-hmi draws with Vulkan here (apps/hmi/backend_vulkan.cpp): Rive's OpenGL
+  # ES path draws broken geometry on the V3D, and OpenGL ES window surfaces
+  # don't reach the screen under X11 (not even Mesa's es2gears). Vulkan renders
+  # offscreen; the frame goes to the window as an X11 image.
+  environment.sessionVariables.HOMY_HMI_BACKEND = "vulkan";
 
   services.getty.autologinUser = "defaultUser";
 

@@ -1,61 +1,53 @@
 // homy-hmi — plays one artboard of a .riv file in a window, with Rive's native
-// renderer on OpenGL ES (EGL). Knows nothing about Qtile or themes: whoever
-// starts it drives it over stdin/stdout, one command per line.
+// renderer. Knows nothing about Qtile or themes: whoever starts it drives it
+// over stdin/stdout, one command per line.
 //
 //   homy-hmi --riv FILE [--artboard NAME] [--title TITLE] [--size WxH]
-//            [--fit contain|layout|cover|fill] [--align center|topCenter]
-//            [--background #RRGGBB] [--present gl|copy] [--msaa N]
+//            [--fit contain|layout|cover|fill|none] [--align center|topCenter]
+//            [--background #RRGGBB] [--backend gl|vulkan] [--present gl|copy] [--msaa N]
 //
 // stdin                                   stdout
-//   number <name> <value>                   ready <artboard> <GL renderer>
-//   string <name> <text…>                   number <name> <value>   (a watched
+//   number <path> <value>                   ready <artboard> <GPU>
+//   string <path> <text…>                   number <path> <value>   (a watched
 //   color <ViewModel>/<name> <#RRGGBB[AA]>    number changed inside the file,
-//   watch <name>                              e.g. a tap wrote activeIndex)
+//   watch <path>                              e.g. a tap wrote activeIndex)
 //   background <#RRGGBB>                    error <message>
 //
-// <name> is a property of the artboard's view model; color addresses a global
-// view model (e.g. Theme/accent). Draws only while something changes.
+// <path> is a property of the artboard's view model; a slash descends into a
+// nested view model (sidebar/activeIndex). color addresses a global view model
+// (e.g. Theme/accent). Draws only while something changes.
 //
-// --present (or HOMY_HMI_PRESENT): how a finished frame reaches the window.
-//   gl    swap the OpenGL ES window surface (default)
-//   copy  render into an offscreen framebuffer on the GPU, read it back and
-//         hand it to the window as a plain X11 image. For the Pi 5 under X11:
-//         its GPU renders fine, but OpenGL ES window surfaces never show up
-//         there (not even Mesa's es2gears). Costs a copy per changed frame.
-// HOMY_HMI_GLDEBUG=1: print the GL extensions and every driver debug message
-// (KHR_debug) plus glGetError after each frame, to stderr.
-// --msaa N (or HOMY_HMI_MSAA): give Rive a multisampled target with N samples.
-//   Where the GPU has none of Rive's "interlock" modes (Pi 5: V3D), Rive draws
-//   in depthStencil mode with MSAA and otherwise sets up the MSAA buffer itself.
+// --backend (or HOMY_HMI_BACKEND): which GPU API Rive draws with (backend.hpp).
+//   gl      OpenGL ES via EGL (default). The VM.
+//   vulkan  Vulkan, offscreen, handed to the window as an X11 image. The Pi 5:
+//           Rive's OpenGL ES path draws broken geometry on its V3D.
+// GL only:
+//   --present copy (HOMY_HMI_PRESENT=copy): render offscreen, hand the frame
+//     to the window as an X11 image instead of swapping the GL window surface.
+//   --msaa N (HOMY_HMI_MSAA): a multisampled target with N samples for Rive.
+//   HOMY_HMI_GLDEBUG=1: GL extensions + driver messages + glGetError on stderr.
+
+#include "backend.hpp"
 
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/artboard.hpp"
 #include "rive/file.hpp"
 #include "rive/layout.hpp"
 #include "rive/renderer.hpp"
-#include "rive/renderer/gl/render_context_gl_impl.hpp"
-#include "rive/renderer/gl/render_target_gl.hpp"
 #include "rive/renderer/render_context.hpp"
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
 #include "rive/viewmodel/viewmodel_instance_color.hpp"
 #include "rive/viewmodel/viewmodel_instance_number.hpp"
 #include "rive/viewmodel/viewmodel_instance_string.hpp"
+#include "rive/viewmodel/viewmodel_instance_viewmodel.hpp"
 
-#include "glad_custom.h"
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-// from GLFW's glfw3native.h, which would also want the Xrandr headers
-extern "C" Display* glfwGetX11Display(void);
-extern "C" ::Window glfwGetX11Window(GLFWwindow* window);
 
 #include <chrono>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <deque>
 #include <fstream>
 #include <functional>
@@ -68,6 +60,23 @@ extern "C" ::Window glfwGetX11Window(GLFWwindow* window);
 #include <vector>
 
 using namespace rive;
+using homy::out;
+using homy::step;
+
+namespace homy
+{
+void out(const std::string& line)
+{
+  std::cout << line << std::endl;   // endl flushes: the controller reads lines
+}
+
+// Startup progress on stderr (the controller only reads stdout), so a crash
+// during setup shows how far it got.
+void step(const std::string& what)
+{
+  std::cerr << "homy-hmi: " << what << std::endl;
+}
+} // namespace homy
 
 namespace
 {
@@ -78,26 +87,9 @@ struct Options
   Fit fit = Fit::contain;
   Alignment align = Alignment::center;
   ColorInt background = 0xff1e1e1e;
-  bool copyPresent = false;
-  int msaa = 0;
+  bool vulkan = false;
+  homy::BackendOptions backend;
 };
-
-void out(const std::string& line)
-{
-  std::cout << line << std::endl;   // endl flushes: the controller reads lines
-}
-
-void GLAD_API_PTR glDebug(GLenum, GLenum, GLuint, GLenum, GLsizei, const GLchar* message, const void*)
-{
-  std::cerr << "gl: " << message << std::endl;
-}
-
-// Startup progress on stderr (the controller only reads stdout), so a crash
-// during setup shows how far it got.
-void step(const std::string& what)
-{
-  std::cerr << "homy-hmi: " << what << std::endl;
-}
 
 bool parseColor(const std::string& hex, ColorInt* argb)
 {
@@ -123,13 +115,20 @@ Options parseArgs(int argc, char** argv)
     else if (k == "--size") std::sscanf(v.c_str(), "%dx%d", &o.width, &o.height);
     else if (k == "--fit")
       o.fit = v == "layout" ? Fit::layout : v == "cover" ? Fit::cover
-            : v == "fill" ? Fit::fill : Fit::contain;
+            : v == "fill" ? Fit::fill : v == "none" ? Fit::none : Fit::contain;
     else if (k == "--align")
       o.align = v == "topCenter" ? Alignment::topCenter : Alignment::center;
     else if (k == "--background") parseColor(v, &o.background);
-    else if (k == "--present") o.copyPresent = v == "copy";
-    else if (k == "--msaa") o.msaa = std::atoi(v.c_str());
+    else if (k == "--backend") o.vulkan = v == "vulkan";
+    else if (k == "--present") o.backend.copyPresent = v == "copy";
+    else if (k == "--msaa") o.backend.msaa = std::atoi(v.c_str());
   }
+  auto env = [](const char* name) { const char* v = std::getenv(name); return std::string(v ? v : ""); };
+  o.vulkan = o.vulkan || env("HOMY_HMI_BACKEND") == "vulkan";
+  o.backend.copyPresent = o.backend.copyPresent || env("HOMY_HMI_PRESENT") == "copy";
+  if (!o.backend.msaa)
+    o.backend.msaa = std::atoi(env("HOMY_HMI_MSAA").c_str());
+  o.backend.glDebug = !env("HOMY_HMI_GLDEBUG").empty();
   return o;
 }
 
@@ -149,15 +148,26 @@ void readStdin()
     glfwPostEmptyEvent();
   }
 }
+
+// "a/b/c": through nested view models a and b to the property c
+ViewModelInstanceValue* propertyAt(rcp<ViewModelInstance> vmi, const std::string& path)
+{
+  std::string::size_type start = 0, slash;
+  while (vmi && (slash = path.find('/', start)) != std::string::npos)
+  {
+    auto* nested = vmi->propertyValue(path.substr(start, slash - start));
+    vmi = nested && nested->is<ViewModelInstanceViewModel>()
+              ? nested->as<ViewModelInstanceViewModel>()->referenceViewModelInstance()
+              : nullptr;
+    start = slash + 1;
+  }
+  return vmi ? vmi->propertyValue(path.substr(start)) : nullptr;
+}
 } // namespace
 
 int main(int argc, char** argv)
 {
   Options opt = parseArgs(argc, argv);
-  if (const char* present = std::getenv("HOMY_HMI_PRESENT"))
-    opt.copyPresent = opt.copyPresent || std::string(present) == "copy";
-  if (const char* msaa = std::getenv("HOMY_HMI_MSAA"); msaa && !opt.msaa)
-    opt.msaa = std::atoi(msaa);
   if (opt.riv.empty())
   {
     std::fprintf(stderr, "usage: homy-hmi --riv FILE [--artboard NAME] …\n");
@@ -171,71 +181,35 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  // ── window + OpenGL ES 3 context via EGL (same path on the VM and the Pi) ──
+  // ── window + GPU backend ──────────────────────────────────────────────────
   if (!glfwInit())
   {
     out("error glfwInit failed");
     return 1;
   }
-  glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+  if (opt.vulkan)
+    homy::vulkanWindowHints();
+  else
+    homy::glWindowHints(opt.backend);
   glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  glfwWindowHint(GLFW_STENCIL_BITS, 8);
-  if (opt.msaa > 0 && !opt.copyPresent)
-    glfwWindowHint(GLFW_SAMPLES, opt.msaa);
   GLFWwindow* window = glfwCreateWindow(opt.width, opt.height, opt.title.c_str(), nullptr, nullptr);
   if (!window)
   {
-    out("error cannot create an OpenGL ES 3 window");
+    out(std::string("error cannot create a window for ") + (opt.vulkan ? "Vulkan" : "OpenGL ES 3"));
     return 1;
   }
-  glfwMakeContextCurrent(window);
-  step("window + OpenGL ES context created");
-  glfwSwapInterval(1);
-  if (!gladLoadCustomLoader(reinterpret_cast<GLADloadfunc>(glfwGetProcAddress)))
-  {
-    out("error cannot load OpenGL");
+  step(std::string("window created, backend ") + (opt.vulkan ? "Vulkan" : "OpenGL ES"));
+  std::unique_ptr<homy::Backend> backend =
+      opt.vulkan ? homy::makeVulkanBackend(window) : homy::makeGLBackend(window, opt.backend);
+  if (!backend)
     return 1;
-  }
-  step(std::string("OpenGL loaded: ") + reinterpret_cast<const char*>(glGetString(GL_VERSION)) +
-       " / " + reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
-  const bool glDebugOn = std::getenv("HOMY_HMI_GLDEBUG") != nullptr;
-  if (glDebugOn)
-  {
-    GLint count = 0;
-    glGetIntegerv(GL_NUM_EXTENSIONS, &count);
-    std::string extensions;
-    for (GLint i = 0; i < count; ++i)
-      extensions += std::string(" ") + reinterpret_cast<const char*>(glGetStringi(GL_EXTENSIONS, i));
-    step("GL extensions:" + extensions);
-    if (GLAD_GL_KHR_debug)
-    {
-      glEnable(GL_DEBUG_OUTPUT_KHR);
-      glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR);
-      glDebugMessageControlKHR(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
-      glDebugMessageCallbackKHR(&glDebug, nullptr);
-      step("GL debug output on");
-    }
-    else
-      step("no KHR_debug: only glGetError after each frame");
-  }
-  auto renderContext = gpu::RenderContextGLImpl::MakeContext();
-  if (!renderContext)
-  {
-    out("error the Rive renderer cannot run on this GPU");
-    return 1;
-  }
-  auto* glImpl = renderContext->static_impl_cast<gpu::RenderContextGLImpl>();
-
+  gpu::RenderContext* renderContext = backend->context();
   step("Rive renderer ready");
 
   // ── the .riv: artboard, state machine, view model + global view models ────
   ImportResult result;
-  rcp<File> file = File::import(Span<const uint8_t>(bytes.data(), bytes.size()),
-                                renderContext.get(), &result);
+  rcp<File> file = File::import(Span<const uint8_t>(bytes.data(), bytes.size()), renderContext, &result);
   if (!file)
   {
     out("error cannot import " + opt.riv);
@@ -279,75 +253,14 @@ int main(int argc, char** argv)
   // The window manager may resize the window (Qtile pins the sidebar), so the
   // sizes are re-read every frame.
   int fbWidth = 0, fbHeight = 0;
-  rcp<gpu::FramebufferRenderTargetGL> renderTarget;
-  // copy present: offscreen framebuffer + an X11 image of the same size
-  GLuint fbo = 0, colorBuffer = 0, depthStencil = 0;
-  GLuint resolveFbo = 0, resolveColor = 0;  // single-sampled copy of an MSAA fbo
-  Display* xDisplay = opt.copyPresent ? glfwGetX11Display() : nullptr;
-  ::Window xWindow = opt.copyPresent ? glfwGetX11Window(window) : 0;
-  GC xGC = opt.copyPresent ? XCreateGC(xDisplay, xWindow, 0, nullptr) : nullptr;
-  XImage* xImage = nullptr;
-  std::vector<uint8_t> pixels;            // RGBA from the GPU, bottom row first
-  if (opt.copyPresent)
-    step("present: copy (offscreen framebuffer → X11 image)");
-  if (opt.msaa > 0)
-    step("MSAA target: " + std::to_string(opt.msaa) + " samples");
-  // storage for the bound renderbuffer, multisampled if asked for
-  auto storage = [&](GLenum format, int samples) {
-    if (samples > 0)
-      glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, format, fbWidth, fbHeight);
-    else
-      glRenderbufferStorage(GL_RENDERBUFFER, format, fbWidth, fbHeight);
-  };
   auto resize = [&]() {
     int w, h, fw, fh;
     glfwGetWindowSize(window, &w, &h);
     glfwGetFramebufferSize(window, &fw, &fh);
-    if (renderTarget && fw == fbWidth && fh == fbHeight && w == opt.width && h == opt.height)
+    if (fbWidth && fw == fbWidth && fh == fbHeight && w == opt.width && h == opt.height)
       return false;
     opt.width = w, opt.height = h, fbWidth = fw, fbHeight = fh;
-    if (opt.copyPresent)
-    {
-      if (fbo)
-      {
-        GLuint fbos[] = {fbo, resolveFbo}, rbs[] = {colorBuffer, depthStencil, resolveColor};
-        glDeleteFramebuffers(2, fbos);
-        glDeleteRenderbuffers(3, rbs);
-      }
-      glGenFramebuffers(1, &fbo);
-      glGenRenderbuffers(1, &colorBuffer);
-      glGenRenderbuffers(1, &depthStencil);
-      glBindRenderbuffer(GL_RENDERBUFFER, colorBuffer);
-      storage(GL_RGBA8, opt.msaa);
-      glBindRenderbuffer(GL_RENDERBUFFER, depthStencil);
-      storage(GL_DEPTH24_STENCIL8, opt.msaa);
-      glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-      glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, colorBuffer);
-      glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencil);
-      if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        out("error offscreen framebuffer incomplete");
-      resolveFbo = 0, resolveColor = 0;
-      if (opt.msaa > 0)
-      {
-        glGenFramebuffers(1, &resolveFbo);
-        glGenRenderbuffers(1, &resolveColor);
-        glBindRenderbuffer(GL_RENDERBUFFER, resolveColor);
-        storage(GL_RGBA8, 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, resolveFbo);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, resolveColor);
-      }
-      glBindFramebuffer(GL_FRAMEBUFFER, 0);
-      pixels.assign(static_cast<size_t>(fbWidth) * fbHeight * 4, 0);
-      if (xImage)
-        XDestroyImage(xImage);             // frees its pixel buffer too
-      XWindowAttributes attrs;
-      XGetWindowAttributes(xDisplay, xWindow, &attrs);
-      xImage = XCreateImage(xDisplay, attrs.visual, attrs.depth, ZPixmap, 0,
-                            reinterpret_cast<char*>(malloc(static_cast<size_t>(fbWidth) * fbHeight * 4)),
-                            fbWidth, fbHeight, 32, 0);
-    }
-    renderTarget = make_rcp<gpu::FramebufferRenderTargetGL>(fbWidth, fbHeight, fbo, opt.msaa);
-    glViewport(0, 0, fbWidth, fbHeight);
+    backend->resize(fbWidth, fbHeight);
     if (opt.fit == Fit::layout)
     {
       artboard->width(static_cast<float>(opt.width));
@@ -397,9 +310,9 @@ int main(int argc, char** argv)
   });
 
   // ── commands from the controller ──────────────────────────────────────────
-  std::map<std::string, float> watched;   // name → last reported value
-  auto numberProp = [&](const std::string& name) -> ViewModelInstanceNumber* {
-    auto* v = vmi ? vmi->propertyValue(name) : nullptr;
+  std::map<std::string, float> watched;   // path → last reported value
+  auto numberProp = [&](const std::string& path) -> ViewModelInstanceNumber* {
+    auto* v = propertyAt(vmi, path);
     return v && v->is<ViewModelInstanceNumber>() ? v->as<ViewModelInstanceNumber>() : nullptr;
   };
   auto handle = [&](const std::string& line) {
@@ -423,7 +336,7 @@ int main(int argc, char** argv)
     {
       std::string text;
       std::getline(words >> std::ws, text);
-      auto* v = vmi ? vmi->propertyValue(name) : nullptr;
+      auto* v = propertyAt(vmi, name);
       if (v && v->is<ViewModelInstanceString>())
         v->as<ViewModelInstanceString>()->propertyValue(text);
       else
@@ -458,8 +371,7 @@ int main(int argc, char** argv)
   };
 
   std::thread(readStdin).detach();
-  out("ready " + std::string(artboard->name()) + " " +
-      reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+  out("ready " + std::string(artboard->name()) + " " + backend->deviceName());
 
   // ── loop: advance + draw while something moves, otherwise sleep ────────────
   auto last = std::chrono::steady_clock::now();
@@ -502,55 +414,24 @@ int main(int argc, char** argv)
       }
     }
 
-    glImpl->invalidateGLState();
+    backend->prepareFrame();
     renderContext->beginFrame({
         .renderTargetWidth = static_cast<uint32_t>(fbWidth),
         .renderTargetHeight = static_cast<uint32_t>(fbHeight),
         .loadAction = gpu::LoadAction::clear,
         .clearColor = opt.background,
-        .msaaSampleCount = static_cast<uint32_t>(opt.msaa),
+        .msaaSampleCount = backend->msaaSampleCount(),
     });
-    RiveRenderer renderer(renderContext.get());
+    RiveRenderer renderer(renderContext);
     renderer.save();
     renderer.transform(Mat2D::fromScale(static_cast<float>(fbWidth) / opt.width,
                                         static_cast<float>(fbHeight) / opt.height) *
                        viewTransform());
     artboard->draw(&renderer);
     renderer.restore();
-    renderContext->flush({.renderTarget = renderTarget.get()});
-    glImpl->unbindGLInternalResources();
-    if (glDebugOn)
-      for (GLenum err; (err = glGetError()) != GL_NO_ERROR;)
-        std::cerr << "gl: glGetError 0x" << std::hex << err << std::dec << std::endl;
-    if (!opt.copyPresent)
-    {
-      glfwSwapBuffers(window);
-      continue;
-    }
-    // GPU → memory (RGBA, bottom row first) → X11 image (BGRX, top row first)
-    GLuint readFbo = fbo;
-    if (resolveFbo)
-    {
-      // MSAA can't be read directly: resolve into the single-sampled copy
-      glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
-      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolveFbo);
-      glBlitFramebuffer(0, 0, fbWidth, fbHeight, 0, 0, fbWidth, fbHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-      readFbo = resolveFbo;
-    }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFbo);
-    glReadPixels(0, 0, fbWidth, fbHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    auto* dst = reinterpret_cast<uint32_t*>(xImage->data);
-    for (int y = 0; y < fbHeight; ++y)
-    {
-      const uint8_t* src = pixels.data() + static_cast<size_t>(fbHeight - 1 - y) * fbWidth * 4;
-      for (int x = 0; x < fbWidth; ++x, src += 4)
-        *dst++ = 0xff000000u | (uint32_t(src[0]) << 16) | (uint32_t(src[1]) << 8) | src[2];
-    }
-    XPutImage(xDisplay, xWindow, xGC, xImage, 0, 0, 0, 0, fbWidth, fbHeight);
-    XFlush(xDisplay);
+    backend->finishFrame();
   }
+  backend.reset();
   glfwTerminate();
   return 0;
 }

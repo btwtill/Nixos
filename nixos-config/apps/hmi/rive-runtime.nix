@@ -1,13 +1,19 @@
 { pkgs ? import <nixpkgs> {} }:
 
-# Rive's C++ runtime + its GPU renderer (OpenGL / OpenGL ES), as static
+# Rive's C++ runtime + its GPU renderer (OpenGL / OpenGL ES and Vulkan), as static
 # libraries and headers for homy-hmi. Upstream builds with premake and fetches
 # its dependencies from GitHub at configure time; here Nix fetches them up
 # front and premake finds them in $DEPENDENCIES (build/dependency.lua skips any
 # dependency whose folder already exists).
 #
+# Vulkan is what the Pi 5 needs: Rive's OpenGL ES path draws broken geometry on
+# its V3D GPU (squares come out as triangles), its Vulkan driver (v3dv) is
+# conformant. The rive_vk_bootstrap helper (instance, device, offscreen frames)
+# isn't a premake project upstream; its sources are installed for homy-hmi to
+# compile in.
+#
 # Built with text (harfbuzz, sheenbidi) and layout (yoga); without image
-# decoders, audio output, scripting, Vulkan — and without LTO, so the static
+# decoders, audio output, scripting — and without LTO, so the static
 # libraries hold machine code any linker can use (with LTO they hold LLVM
 # bitcode: "archive has no index").
 let
@@ -20,6 +26,10 @@ let
     "rive-app_miniaudio_rive_changes_11"    = gh "rive-app" "miniaudio" "rive_changes_11" "sha256-9xdqwRk/qPxNe2SdggKueMb17N2ifwOCL/NHdazatqQ=";
     "rive-app_yoga_rive_yoga_dee88d2dfcad"  = gh "rive-app" "yoga" "rive_yoga_dee88d2dfcad" "sha256-Jt5ipTMYYXCXHWi07VkdS78F+DbsbSD/XRQ1R2ajixE=";
     "dabeaz_ply_3.11"                       = gh "dabeaz" "ply" "3.11" "sha256-PEwIgmM7DQHy6FOhcUwkricrdW3wZe3ggSQnUvgKISo=";
+    "KhronosGroup_Vulkan-Headers_vulkan-sdk-1.4.321" =
+      gh "KhronosGroup" "Vulkan-Headers" "vulkan-sdk-1.4.321" "sha256-Yznjiiu/EEW7B37hbO0aw8Lvc6aVxOy7J/zSwmGxVc0=";
+    "GPUOpen-LibrariesAndSDKs_VulkanMemoryAllocator_v3.3.0" =
+      gh "GPUOpen-LibrariesAndSDKs" "VulkanMemoryAllocator" "v3.3.0" "sha256-TPEqV8uHbnyphLG0A+b2tgLDQ6K7a2dOuDHlaFPzTeE=";
   };
 
   # only the libraries homy-hmi links, not upstream's sample apps
@@ -37,7 +47,7 @@ pkgs.clangStdenv.mkDerivation {
   src = gh "rive-app" "rive-runtime" "65860c42ccfbe9cbbd5f1079d7104d871e8a22f9"
     "sha256-hWT9ChKp9UIYamGar/+GJcFvqq+18QS6ElKJKksvOyU=";
 
-  nativeBuildInputs = with pkgs; [ premake5 python3 gnumake which ];
+  nativeBuildInputs = with pkgs; [ premake5 python3 gnumake which glslang spirv-tools ];
 
   configurePhase = ''
     runHook preConfigure
@@ -51,7 +61,7 @@ pkgs.clangStdenv.mkDerivation {
     cp ${premakeFile} renderer/premake5_homy.lua
     cd renderer
     premake5 --file=premake5_homy.lua --config=release --out=out/release \
-      --with_rive_text --with_rive_layout --no-rive-decoders --no-lto gmake
+      --with_rive_text --with_rive_layout --no-rive-decoders --no-lto --with_vulkan gmake
     runHook postConfigure
   '';
 
@@ -71,6 +81,13 @@ pkgs.clangStdenv.mkDerivation {
     cp -r include/. $out/include/                    # renderer: rive/renderer/…
     cp -r glad/include/. $out/include/               # glad/, EGL/, KHR/
     cp glad/glad_custom.h $out/include/                # included as "glad_custom.h"
+    cp -r ../deps/KhronosGroup_Vulkan-Headers_vulkan-sdk-1.4.321/include/. $out/include/
+    cp ../deps/GPUOpen-LibrariesAndSDKs_VulkanMemoryAllocator_v3.3.0/include/vk_mem_alloc.h $out/include/
+    cp -r rive_vk_bootstrap/include/. $out/include/   # rive_vk_bootstrap/…
+    mkdir -p $out/share/rive_vk_bootstrap
+    cp -r rive_vk_bootstrap/src $out/share/rive_vk_bootstrap/
+    mkdir -p $out/share/rive_vk_bootstrap/src/shaders   # vulkan_device.cpp includes it
+    cp src/shaders/constants.glsl $out/share/rive_vk_bootstrap/src/shaders/
     runHook postInstall
   '';
 }
