@@ -4,7 +4,7 @@
 //
 //   homy-hmi --riv FILE [--artboard NAME] [--title TITLE] [--size WxH]
 //            [--fit contain|layout|cover|fill] [--align center|topCenter]
-//            [--background #RRGGBB] [--present gl|copy]
+//            [--background #RRGGBB] [--present gl|copy] [--msaa N]
 //
 // stdin                                   stdout
 //   number <name> <value>                   ready <artboard> <GL renderer>
@@ -22,6 +22,9 @@
 //         hand it to the window as a plain X11 image. For the Pi 5 under X11:
 //         its GPU renders fine, but OpenGL ES window surfaces never show up
 //         there (not even Mesa's es2gears). Costs a copy per changed frame.
+// --msaa N (or HOMY_HMI_MSAA): give Rive a multisampled target with N samples.
+//   Where the GPU has none of Rive's "interlock" modes (Pi 5: V3D), Rive draws
+//   in depthStencil mode with MSAA and otherwise sets up the MSAA buffer itself.
 
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/artboard.hpp"
@@ -74,6 +77,7 @@ struct Options
   Alignment align = Alignment::center;
   ColorInt background = 0xff1e1e1e;
   bool copyPresent = false;
+  int msaa = 0;
 };
 
 void out(const std::string& line)
@@ -117,6 +121,7 @@ Options parseArgs(int argc, char** argv)
       o.align = v == "topCenter" ? Alignment::topCenter : Alignment::center;
     else if (k == "--background") parseColor(v, &o.background);
     else if (k == "--present") o.copyPresent = v == "copy";
+    else if (k == "--msaa") o.msaa = std::atoi(v.c_str());
   }
   return o;
 }
@@ -144,6 +149,8 @@ int main(int argc, char** argv)
   Options opt = parseArgs(argc, argv);
   if (const char* present = std::getenv("HOMY_HMI_PRESENT"))
     opt.copyPresent = opt.copyPresent || std::string(present) == "copy";
+  if (const char* msaa = std::getenv("HOMY_HMI_MSAA"); msaa && !opt.msaa)
+    opt.msaa = std::atoi(msaa);
   if (opt.riv.empty())
   {
     std::fprintf(stderr, "usage: homy-hmi --riv FILE [--artboard NAME] …\n");
@@ -170,6 +177,8 @@ int main(int argc, char** argv)
   glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   glfwWindowHint(GLFW_STENCIL_BITS, 8);
+  if (opt.msaa > 0 && !opt.copyPresent)
+    glfwWindowHint(GLFW_SAMPLES, opt.msaa);
   GLFWwindow* window = glfwCreateWindow(opt.width, opt.height, opt.title.c_str(), nullptr, nullptr);
   if (!window)
   {
@@ -246,6 +255,7 @@ int main(int argc, char** argv)
   rcp<gpu::FramebufferRenderTargetGL> renderTarget;
   // copy present: offscreen framebuffer + an X11 image of the same size
   GLuint fbo = 0, colorBuffer = 0, depthStencil = 0;
+  GLuint resolveFbo = 0, resolveColor = 0;  // single-sampled copy of an MSAA fbo
   Display* xDisplay = opt.copyPresent ? glfwGetX11Display() : nullptr;
   ::Window xWindow = opt.copyPresent ? glfwGetX11Window(window) : 0;
   GC xGC = opt.copyPresent ? XCreateGC(xDisplay, xWindow, 0, nullptr) : nullptr;
@@ -253,6 +263,15 @@ int main(int argc, char** argv)
   std::vector<uint8_t> pixels;            // RGBA from the GPU, bottom row first
   if (opt.copyPresent)
     step("present: copy (offscreen framebuffer → X11 image)");
+  if (opt.msaa > 0)
+    step("MSAA target: " + std::to_string(opt.msaa) + " samples");
+  // storage for the bound renderbuffer, multisampled if asked for
+  auto storage = [&](GLenum format, int samples) {
+    if (samples > 0)
+      glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, format, fbWidth, fbHeight);
+    else
+      glRenderbufferStorage(GL_RENDERBUFFER, format, fbWidth, fbHeight);
+  };
   auto resize = [&]() {
     int w, h, fw, fh;
     glfwGetWindowSize(window, &w, &h);
@@ -264,36 +283,43 @@ int main(int argc, char** argv)
     {
       if (fbo)
       {
-        glDeleteFramebuffers(1, &fbo);
-        glDeleteRenderbuffers(1, &colorBuffer);
-        glDeleteRenderbuffers(1, &depthStencil);
+        GLuint fbos[] = {fbo, resolveFbo}, rbs[] = {colorBuffer, depthStencil, resolveColor};
+        glDeleteFramebuffers(2, fbos);
+        glDeleteRenderbuffers(3, rbs);
       }
       glGenFramebuffers(1, &fbo);
       glGenRenderbuffers(1, &colorBuffer);
       glGenRenderbuffers(1, &depthStencil);
       glBindRenderbuffer(GL_RENDERBUFFER, colorBuffer);
-      glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, fbWidth, fbHeight);
+      storage(GL_RGBA8, opt.msaa);
       glBindRenderbuffer(GL_RENDERBUFFER, depthStencil);
-      glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, fbWidth, fbHeight);
+      storage(GL_DEPTH24_STENCIL8, opt.msaa);
       glBindFramebuffer(GL_FRAMEBUFFER, fbo);
       glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, colorBuffer);
       glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencil);
       if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         out("error offscreen framebuffer incomplete");
+      resolveFbo = 0, resolveColor = 0;
+      if (opt.msaa > 0)
+      {
+        glGenFramebuffers(1, &resolveFbo);
+        glGenRenderbuffers(1, &resolveColor);
+        glBindRenderbuffer(GL_RENDERBUFFER, resolveColor);
+        storage(GL_RGBA8, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, resolveFbo);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, resolveColor);
+      }
       glBindFramebuffer(GL_FRAMEBUFFER, 0);
       pixels.assign(static_cast<size_t>(fbWidth) * fbHeight * 4, 0);
       if (xImage)
-      {
-        xImage->data = nullptr;           // the buffer is ours, not Xlib's
-        XDestroyImage(xImage);
-      }
+        XDestroyImage(xImage);             // frees its pixel buffer too
       XWindowAttributes attrs;
       XGetWindowAttributes(xDisplay, xWindow, &attrs);
       xImage = XCreateImage(xDisplay, attrs.visual, attrs.depth, ZPixmap, 0,
                             reinterpret_cast<char*>(malloc(static_cast<size_t>(fbWidth) * fbHeight * 4)),
                             fbWidth, fbHeight, 32, 0);
     }
-    renderTarget = make_rcp<gpu::FramebufferRenderTargetGL>(fbWidth, fbHeight, fbo, 0);
+    renderTarget = make_rcp<gpu::FramebufferRenderTargetGL>(fbWidth, fbHeight, fbo, opt.msaa);
     glViewport(0, 0, fbWidth, fbHeight);
     if (opt.fit == Fit::layout)
     {
@@ -455,6 +481,7 @@ int main(int argc, char** argv)
         .renderTargetHeight = static_cast<uint32_t>(fbHeight),
         .loadAction = gpu::LoadAction::clear,
         .clearColor = opt.background,
+        .msaaSampleCount = static_cast<uint32_t>(opt.msaa),
     });
     RiveRenderer renderer(renderContext.get());
     renderer.save();
@@ -471,7 +498,17 @@ int main(int argc, char** argv)
       continue;
     }
     // GPU → memory (RGBA, bottom row first) → X11 image (BGRX, top row first)
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    GLuint readFbo = fbo;
+    if (resolveFbo)
+    {
+      // MSAA can't be read directly: resolve into the single-sampled copy
+      glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolveFbo);
+      glBlitFramebuffer(0, 0, fbWidth, fbHeight, 0, 0, fbWidth, fbHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+      glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+      readFbo = resolveFbo;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFbo);
     glReadPixels(0, 0, fbWidth, fbHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     auto* dst = reinterpret_cast<uint32_t*>(xImage->data);
