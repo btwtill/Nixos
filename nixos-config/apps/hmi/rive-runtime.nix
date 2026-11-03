@@ -7,7 +7,9 @@
 # dependency whose folder already exists).
 #
 # Built with text (harfbuzz, sheenbidi) and layout (yoga); without image
-# decoders, audio output, scripting, Vulkan.
+# decoders, audio output, scripting, Vulkan — and without LTO, so the static
+# libraries hold machine code any linker can use (with LTO they hold LLVM
+# bitcode: "archive has no index").
 let
   gh = owner: repo: rev: hash: pkgs.fetchFromGitHub { inherit owner repo rev hash; };
 
@@ -49,7 +51,7 @@ pkgs.clangStdenv.mkDerivation {
     cp ${premakeFile} renderer/premake5_homy.lua
     cd renderer
     premake5 --file=premake5_homy.lua --config=release --out=out/release \
-      --with_rive_text --with_rive_layout --no-rive-decoders gmake
+      --with_rive_text --with_rive_layout --no-rive-decoders --no-lto gmake
     runHook postConfigure
   '';
 
@@ -64,6 +66,7 @@ pkgs.clangStdenv.mkDerivation {
     runHook preInstall
     mkdir -p $out/lib $out/include
     find out/release -name '*.a' -exec cp {} $out/lib/ \;
+    for a in $out/lib/*.a; do ranlib "$a"; done      # symbol index for the linker
     cp -r ../include/. $out/include/                 # runtime: rive/…
     cp -r include/. $out/include/                    # renderer: rive/renderer/…
     cp -r glad/include/. $out/include/               # glad/, EGL/, KHR/
