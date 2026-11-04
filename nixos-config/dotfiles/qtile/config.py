@@ -300,45 +300,51 @@ def remove_empty_app_group(client):
 
     qtile.call_later(0.2, cleanup)
 
-def _show_launcher(qtile):
-    """Menu button. Safety net first: an app window sitting in the menu's own
-    group (it missed its app group) would cover the menu — move it out."""
+@hook.subscribe.setgroup
+def rescue_launcher_apps():
+    """Safety net when the app menu is shown: an app window sitting in the
+    menu's own group (it missed its app group) would cover the menu — move it out."""
     launcher = qtile.groups_map[LAUNCHER_GROUP]
+    if qtile.current_group is not launcher:
+        return
     for w in list(launcher.windows):
         app_id = _homy_app_id(w)
         if app_id:
             logger.warning("homy: moving %r out of the app menu into app:%s", w.name, app_id)
             _to_app_group(w, app_id)
-    launcher.toscreen()
 
 # ----------------------
-# Homy shell (apps/shell → homy-hmi, Rive's native renderer), by title:
-#   sidebar    pinned over the right edge as a static (untiled) window;
-#              RIGHT_BAR (a Gap) keeps the space free and draws nothing.
-#              Group changes are reported to it to highlight the matching button.
+# Homy HMI (apps/shell → homy-hmi, Rive's native renderer, homy-neo-hmi.riv):
+# one window with the top bar, sidebar and bottom bar, pinned by its title
+# over the whole screen as a static (untiled) window, kept below every other
+# window. The bars of the screen are Gaps: they keep the HMI's bars free and
+# draw nothing, the apps are tiled over the HMI's app area.
+# Group changes are reported to the shell to highlight the matching button.
+# Hosts without homy-shell (Pi 3B+, laptop) keep Qtile's own SVG bars.
 # ----------------------
-SIDEBAR_TITLE   = "Homy Sidebar"
-SIDEBAR_URL     = "http://127.0.0.1:47811/group?name="
+HMI_HOSTS = {"vm", "pi5"}
+HMI_TITLE = "Homy HMI"
+HMI_URL   = "http://127.0.0.1:47811/group?name="
 
 @hook.subscribe.setgroup
-def notify_sidebar():
+def notify_hmi():
     name = qtile.current_group.name
 
     def send():
         try:
-            urllib.request.urlopen(SIDEBAR_URL + urllib.parse.quote(name), timeout=0.5).close()
+            urllib.request.urlopen(HMI_URL + urllib.parse.quote(name), timeout=0.5).close()
         except Exception:
-            pass                                   # sidebar not running (yet)
+            pass                                   # HMI not running (yet)
 
     threading.Thread(target=send, daemon=True).start()
 
 @hook.subscribe.client_new
 def assign_startup_group(client):
-    if client.name == SIDEBAR_TITLE:
+    if client.name == HMI_TITLE:
         screen = qtile.current_screen
-        client.static(screen.index, x=screen.x + screen.width - BAR_WIDTH, y=screen.y + BAR_HEIGHT,
-                      width=BAR_WIDTH, height=screen.height - 2 * BAR_HEIGHT)
-        logger.warning("homy: sidebar pinned over the right bar")
+        client.static(screen.index, x=0, y=0, width=screen.width, height=screen.height)
+        qtile.windows_map[client.wid].keep_below(True)   # client.static() replaced the window object
+        logger.warning("homy: HMI pinned over the whole screen, below the apps")
         return
     app_id = _homy_app_id(client)
     if app_id:
@@ -430,10 +436,8 @@ BAR_HEIGHT = 40
 BTN_W      = 95
 BTN_H      = 40
 
-# Right edge: on hosts with the Rive sidebar (apps/shell) the bar only
-# reserves the space and draws nothing, so the sidebar's transparent areas show
-# the wallpaper. The Pi 3B+ has no sidebar and keeps the classic SVG buttons.
-RIGHT_BAR = (
+# With the HMI the bars are Gaps of its bars' size (see HMI_HOSTS above).
+RIGHT_BAR = bar.Gap(BAR_WIDTH) if _hostname in HMI_HOSTS else (
     bar.Bar(
         [
             SvgButton(icon("Home_Button.svg"), icon("Home_Button_Highlighted.svg"),
@@ -450,12 +454,9 @@ RIGHT_BAR = (
         BAR_WIDTH,
         background=colors["bg"],
     )
-    if _hostname == "pi" else bar.Gap(BAR_WIDTH)
 )
 
-# Top and bottom edge: Qtile's own bars with the SVG buttons (on the
-# native-rive branch only the sidebar is Rive so far).
-TOP_BAR = (
+TOP_BAR = bar.Gap(BAR_HEIGHT) if _hostname in HMI_HOSTS else (
     bar.Bar(
         [
             SvgButton(icon("Terminal_Button.svg"), icon("Terminal_Button_Highlighted.svg"),
@@ -463,7 +464,7 @@ TOP_BAR = (
                 icon_width=BTN_W, icon_height=BTN_H),
             widget.Spacer(),
             SvgButton(icon("Menu_Button.svg"), icon("Menu_Button_Highlighted.svg"),
-                lazy.function(_show_launcher),
+                lazy.group[LAUNCHER_GROUP].toscreen(),
                 icon_width=375, icon_height=40),
             widget.Spacer(),
             SvgButton(icon("WifiButton.svg"), icon("WifiButtonPushed.svg"),
@@ -475,7 +476,7 @@ TOP_BAR = (
     )
 )
 
-BOTTOM_BAR = (
+BOTTOM_BAR = bar.Gap(BAR_HEIGHT) if _hostname in HMI_HOSTS else (
     bar.Bar(
         [
             SvgButton(icon("Bluetooth_Button.svg"), icon("Bluetooth_Button_Highlighted.svg"),
@@ -513,7 +514,7 @@ floating_layout = layout.Floating(
 # General Settings
 # ----------------------
 follow_mouse_focus = True
-bring_front_click = True
+bring_front_click = "floating_only"   # a tap on the HMI must not raise it over the apps
 cursor_warp = False
 auto_fullscreen = True
 focus_on_window_activation = "smart"

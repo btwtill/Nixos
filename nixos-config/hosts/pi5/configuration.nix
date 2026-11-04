@@ -145,8 +145,8 @@
     (pkgs.callPackage ../../apps/osk {})
     (pkgs.callPackage ../../apps/launcher {})
     (pkgs.callPackage ../../ui {})            # homy-ui: the .riv files
-    (pkgs.callPackage ../../apps/hmi {})       # homy-hmi: Rive's native renderer (OpenGL ES)
-    (pkgs.callPackage ../../apps/shell {})     # homy-shell: drives homy-hmi (sidebar)
+    (pkgs.callPackage ../../apps/hmi {})       # homy-hmi: Rive's native renderer (Vulkan here)
+    (pkgs.callPackage ../../apps/shell {})     # homy-shell: drives homy-hmi (homy-neo-hmi, the whole screen)
     picom                                     # compositor (fading)
     xsetroot
     (pkgs.callPackage ../../apps/system {

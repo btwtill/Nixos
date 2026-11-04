@@ -112,7 +112,6 @@
     alacritty
     picom
     rofi
-    nitrogen
     mousepad
     librsvg
     git
@@ -126,7 +125,7 @@
     (pkgs.callPackage ../../apps/launcher {})
     (pkgs.callPackage ../../ui {})            # homy-ui: the .riv files
     (pkgs.callPackage ../../apps/hmi {})       # homy-hmi: Rive's native renderer (OpenGL ES)
-    (pkgs.callPackage ../../apps/shell {})     # homy-shell: drives homy-hmi (sidebar)
+    (pkgs.callPackage ../../apps/shell {})     # homy-shell: drives homy-hmi (homy-neo-hmi, the whole screen)
     xsetroot
     (pkgs.callPackage ../../apps/screenshot {})
     (pkgs.callPackage ../../apps/system {
@@ -154,9 +153,12 @@
   # no UI step needed — so apps can be developed against the
   # real REST + WebSocket API without physical hardware.
   # -------------------------------------------------------
+  # services.home-assistant.openFirewall no longer works (the port isn't
+  # known at eval time), so open the default frontend port directly.
+  networking.firewall.allowedTCPPorts = [ 8123 ];
+
   services.home-assistant = {
     enable = true;
-    openFirewall = true;
 
     extraComponents = [
       # Required to complete the onboarding flow

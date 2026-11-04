@@ -1,20 +1,18 @@
 """Homy shell — connects the Rive HMI to the rest of the system.
 
-The drawing is done by homy-hmi (apps/hmi, Rive's native renderer on OpenGL
-ES); this process only drives it, one homy-hmi per surface, over its
-stdin/stdout:
+The drawing is done by homy-hmi (apps/hmi, Rive's native renderer); this
+process only drives it over its stdin/stdout. One homy-hmi plays homy-neo-hmi,
+the whole screen in one file: top bar, sidebar, bottom bar, and the app area
+the apps are tiled over (Qtile keeps the HMI window below them).
 
-  homy-hmi → here    "number activeIndex 2"   a button was tapped
-  here → homy-hmi    "number activeIndex 2"   highlight the button of the group
-                     "color Theme/accent #…"  theme tokens (homy-theme)
+  homy-hmi → here    "number topbar/activeIndex 1"   a button was tapped
+  here → homy-hmi    "number sidebar/activeIndex 2"  highlight the current group
+                     "string bottombar/time 12:34"   the clock
+                     "color Theme/accent #…"         theme tokens (homy-theme)
 
 and connects it to the system: taps switch Qtile groups, Qtile reports group
 changes to 127.0.0.1:47811/group?name=… (its setgroup hook), colours follow
 the homy-theme service (127.0.0.1:47820/events).
-
-  sidebar    right edge. Qtile pins the window by its title.
-
-    homy-shell [surface …]      default: all surfaces
 """
 from __future__ import annotations
 
@@ -22,7 +20,6 @@ import http.server
 import json
 import os
 import subprocess
-import sys
 import threading
 import time
 import urllib.parse
@@ -34,56 +31,60 @@ HMI = os.environ.get("HOMY_HMI", "homy-hmi")
 PORT = 47811                      # Qtile's setgroup hook talks to this
 THEME_EVENTS = "http://127.0.0.1:47820/events"
 
-# surface → the homy-hmi window for it. Qtile pins windows by title.
-SURFACES = {
-    "sidebar": {"riv": "sidebar", "artboard": "SideBar", "title": "Homy Sidebar",
-                "size": "180x520", "fit": "contain", "align": "topCenter"},
-}
+# The HMI window. Qtile pins it by its title over the whole screen; "layout"
+# fits the artboard to the screen (bars keep their size, the app area grows).
+RIV, ARTBOARD, TITLE = "homy-neo-hmi", "HMI", "Homy HMI"
 
-# Navigation: activeIndex (button position) → what a tap does.
-#   group name  switch to that Qtile group (and highlight the button there)
+# Navigation per bar: activeIndex (button position) → what a tap does.
+#   group name  switch to that Qtile group (the button stays highlighted there)
 #   "power"     systemctl poweroff (sidebar button 4, like the old Shutdown button)
 NAV = {
-    "sidebar": {0: "1", 1: "2", 2: "3", 3: "4", 4: "power"},
+    "sidebar":   {0: "1", 1: "2", 2: "3", 3: "4", 4: "power"},
+    "topbar":    {0: "5", 1: "9", 2: "8"},        # terminal, app menu, Wi-Fi
+    "bottombar": {0: "7", 1: "6"},                # Bluetooth, system
 }
+MENU = ("topbar", 1)              # also highlighted while a launcher app (app:<id>) is shown
 
 
 def log(msg: str):
     print(f"[homy-shell] {msg}", flush=True)
 
 
-def active_index(surface: str, group: str) -> int:
-    """The button to highlight on a surface while `group` is shown (-1: none)."""
-    for index, action in NAV.get(surface, {}).items():
+def active_index(bar: str, group: str) -> int:
+    """The button to highlight on a bar while `group` is shown (-1: none)."""
+    if group.startswith("app:") and bar == MENU[0]:
+        return MENU[1]
+    for index, action in NAV[bar].items():
         if action == group:
             return index
     return -1
 
 
-def navigate(surface: str, index: int):
-    """A button on a surface was tapped."""
-    action = NAV.get(surface, {}).get(index)
+def navigate(bar: str, index: int):
+    """A button on a bar was tapped."""
+    action = NAV[bar].get(index)
     if action == "power":
         log("power button → systemctl poweroff")
         subprocess.run(["systemctl", "poweroff"])
     elif action:
         subprocess.run(["qtile", "cmd-obj", "-o", "group", action, "-f", "toscreen"], capture_output=True)
     elif index >= 0:
-        log(f"no action for {surface} button {index}")
+        log(f"no action for {bar} button {index}")
 
 
-class Surface:
-    """One homy-hmi process; restarted if it exits."""
+class Hmi:
+    """The homy-hmi process; restarted if it exits."""
 
-    def __init__(self, name: str, spec: dict):
-        self.name, self.spec = name, spec
+    def __init__(self):
         self.proc: subprocess.Popen | None = None
         self.lock = threading.Lock()
-        self.index = active_index(name, "1")          # Qtile starts on group 1 = Home
+        self.group = "1"                              # Qtile starts on group 1 = Home
+        self.index = {bar: active_index(bar, self.group) for bar in NAV}
         self.theme: dict[str, str] = {}
 
     def start(self):
         threading.Thread(target=self._run, daemon=True).start()
+        threading.Thread(target=self._clock, daemon=True).start()
 
     def send(self, line: str):
         with self.lock:
@@ -94,9 +95,12 @@ class Surface:
                 except OSError:
                     pass
 
-    def set_active(self, index: int):
-        self.index = index
-        self.send(f"number activeIndex {index}")
+    def show_group(self, group: str):
+        """Qtile switched groups: highlight the matching button on every bar."""
+        self.group = group
+        for bar in NAV:
+            self.index[bar] = active_index(bar, group)
+            self.send(f"number {bar}/activeIndex {self.index[bar]}")
 
     def set_theme(self, tokens: dict[str, str]):
         self.theme = tokens
@@ -105,10 +109,14 @@ class Surface:
         if "wallpaper" in tokens:
             self.send(f"background {tokens['wallpaper'][:7]}")
 
+    def _clock(self):
+        while True:
+            self.send(f"string bottombar/time {time.strftime('%H:%M')}")
+            time.sleep(60 - time.time() % 60 + 0.05)  # just after the next full minute
+
     def _run(self):
-        s = self.spec
-        cmd = [HMI, "--riv", str(UI / "riv" / f"{s['riv']}.riv"), "--artboard", s["artboard"],
-               "--title", s["title"], "--size", s["size"], "--fit", s["fit"], "--align", s["align"]]
+        cmd = [HMI, "--riv", str(UI / "riv" / f"{RIV}.riv"), "--artboard", ARTBOARD,
+               "--title", TITLE, "--size", "1024x600", "--fit", "layout"]
         while True:
             started = time.monotonic()
             with self.lock:
@@ -116,27 +124,32 @@ class Surface:
                                              text=True, bufsize=1)
             for line in self.proc.stdout:
                 self._handle(line.strip())
-            log(f"{self.name}: homy-hmi exited ({self.proc.wait()})")
+            log(f"homy-hmi exited ({self.proc.wait()})")
             # restart, but not in a tight loop if it can't start at all
             time.sleep(1 if time.monotonic() - started > 10 else 10)
 
     def _handle(self, line: str):
         kind, _, rest = line.partition(" ")
         if kind == "ready":
-            log(f"{self.name}: ready ({rest})")
-            self.send("watch activeIndex")
-            self.set_active(self.index)
+            log(f"ready ({rest})")
+            for bar in NAV:
+                self.send(f"watch {bar}/activeIndex")
+            self.show_group(self.group)
             self.set_theme(self.theme)
-        elif kind == "number" and rest.startswith("activeIndex "):
-            index = int(float(rest.split()[1]))
-            if index != self.index:
-                self.index = index
-                threading.Thread(target=navigate, args=(self.name, index), daemon=True).start()
+            self.send(f"string bottombar/time {time.strftime('%H:%M')}")
+            return
+        path, _, value = rest.partition(" ")
+        bar, _, prop = path.partition("/")
+        if kind == "number" and bar in NAV and prop == "activeIndex":
+            index = int(float(value))
+            if index != self.index[bar]:
+                self.index[bar] = index
+                threading.Thread(target=navigate, args=(bar, index), daemon=True).start()
         else:
-            log(f"{self.name}: {line}")
+            log(line)
 
 
-def follow_theme(surfaces: list[Surface]):
+def follow_theme(hmi: Hmi):
     """Server-Sent Events from homy-theme: the active theme now and on change."""
     while True:
         try:
@@ -146,19 +159,14 @@ def follow_theme(surfaces: list[Surface]):
                     if line.startswith("data: "):
                         theme = json.loads(line[6:])
                         log(f"theme: {theme['id']}")
-                        for s in surfaces:
-                            s.set_theme(theme["tokens"])
+                        hmi.set_theme(theme["tokens"])
         except Exception as e:
             log(f"theme service unavailable ({e}); retrying")
         time.sleep(3)
 
 
 def main():
-    wanted = sys.argv[1:] or list(SURFACES)
-    unknown = [s for s in wanted if s not in SURFACES]
-    if unknown:
-        sys.exit(f"homy-shell: unknown surface(s) {unknown}; known: {list(SURFACES)}")
-    surfaces = [Surface(name, SURFACES[name]) for name in wanted]
+    hmi = Hmi()
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -169,8 +177,7 @@ def main():
             group = urllib.parse.parse_qs(url.query).get("name", [""])[0]
             self.send_response(204)
             self.end_headers()
-            for s in surfaces:
-                s.set_active(active_index(s.name, group))
+            hmi.show_group(group)
 
         def log_message(self, *args):
             pass
@@ -180,12 +187,11 @@ def main():
         server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
         log(f"port {PORT} in use — the shell is already running")
-        sys.exit(0)
+        raise SystemExit(0)
 
-    for s in surfaces:
-        s.start()
-    threading.Thread(target=follow_theme, args=(surfaces,), daemon=True).start()
-    log(f"surfaces: {', '.join(wanted)} (homy-hmi)")
+    hmi.start()
+    threading.Thread(target=follow_theme, args=(hmi,), daemon=True).start()
+    log(f"HMI: {RIV}.riv (homy-hmi)")
     server.serve_forever()
 
 

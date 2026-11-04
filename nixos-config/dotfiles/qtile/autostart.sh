@@ -8,7 +8,7 @@ xsetroot -solid "#1e1e1e"
 if command -v osk &>/dev/null; then
   osk daemon &
 fi
-# Rive HMI (homy-shell → homy-hmi): the sidebar, pinned by the Qtile config.
+# Rive HMI (homy-shell → homy-hmi): the whole screen, pinned by the Qtile config.
 # Log: ~/.local/state/homy-shell.log
 if command -v homy-shell &>/dev/null; then
   mkdir -p ~/.local/state

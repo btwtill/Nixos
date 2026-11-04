@@ -3,11 +3,11 @@
 , hmi ? pkgs.callPackage ../hmi {}       # homy-hmi: Rive's native renderer
 }:
 
-# Homy shell — drives homy-hmi (one per surface) and connects it to Qtile and
+# Homy shell — drives homy-hmi (homy-neo-hmi, the whole screen) and connects it to Qtile and
 # the theme service. Plain Python, no Qt. See main.py.
 pkgs.stdenv.mkDerivation {
   pname   = "homy-shell";
-  version = "0.4.0";
+  version = "0.5.0";
 
   src = ./.;
 

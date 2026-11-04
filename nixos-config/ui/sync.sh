@@ -9,12 +9,12 @@
 # assets); HOMY_DESIGN_THEME picks which one is built (default: "default").
 #
 # Then commit riv/ and rebuild NixOS. Needs the Rive CLI (`rive`).
-# homy-ui (the library) is not built here: its parts arrive inside each surface.
+# homy-neo-hmi is the whole screen (top, side and bottom bar in one file).
 set -euo pipefail
 
 DESIGN="${HOMY_DESIGN:-$HOME/Documents/Management/10_Projects/personal/homy-design}/${HOMY_DESIGN_THEME:-default}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SURFACES=(sidebar)
+SURFACES=(homy-neo-hmi)
 
 for s in "${SURFACES[@]}"; do
   project="$DESIGN/$s"
