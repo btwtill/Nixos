@@ -17,7 +17,7 @@ namespace homy
 struct BackendOptions
 {
   bool copyPresent = false;   // GL: render offscreen, hand the frame over as an X11 image
-  int msaa = 0;               // GL: give Rive a multisampled target with this many samples
+  int msaa = 0;               // give Rive a multisampled target with this many samples
   bool glDebug = false;       // GL: print extensions + driver messages to stderr
 };
 
@@ -56,7 +56,7 @@ void glWindowHints(const BackendOptions&);
 void vulkanWindowHints();
 
 std::unique_ptr<Backend> makeGLBackend(GLFWwindow*, const BackendOptions&);
-std::unique_ptr<Backend> makeVulkanBackend(GLFWwindow*);
+std::unique_ptr<Backend> makeVulkanBackend(GLFWwindow*, const BackendOptions&);
 
 // Hands a rendered frame to the window as an X11 image. Works where the GPU's
 // own way onto an X11 window doesn't (Pi 5). The image lives in memory shared

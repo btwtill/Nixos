@@ -36,11 +36,12 @@ class VulkanBackend final : public Backend
 {
 public:
   VulkanBackend(GLFWwindow* window,
+                const BackendOptions& opt,
                 std::unique_ptr<rive_vkb::VulkanInstance> instance,
                 std::unique_ptr<rive_vkb::VulkanDevice> device,
                 std::unique_ptr<gpu::RenderContext> context)
       : m_instance(std::move(instance)), m_device(std::move(device)), m_context(std::move(context)),
-        m_copy(window)
+        m_copy(window), m_msaa(opt.msaa)
   {
     const char* format = std::getenv("HOMY_HMI_VK_FORMAT");
     if (format && std::strcmp(format, "rgba") == 0)
@@ -58,6 +59,7 @@ public:
 
   gpu::RenderContext* context() override { return m_context.get(); }
   std::string deviceName() const override { return m_device->name() + " (Vulkan)"; }
+  uint32_t msaaSampleCount() const override { return static_cast<uint32_t>(m_msaa); }
 
   void resize(int width, int height) override
   {
@@ -131,6 +133,7 @@ private:
   rcp<gpu::RenderTargetVulkanImpl> m_target;
   X11Copy m_copy;
   VkFormat m_format = VK_FORMAT_B8G8R8A8_UNORM;
+  int m_msaa = 0;
 };
 } // namespace
 
@@ -139,7 +142,7 @@ void vulkanWindowHints()
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);   // a plain X11 window; Vulkan renders offscreen
 }
 
-std::unique_ptr<Backend> makeVulkanBackend(GLFWwindow* window)
+std::unique_ptr<Backend> makeVulkanBackend(GLFWwindow* window, const BackendOptions& opt)
 {
   auto instance = rive_vkb::VulkanInstance::Create({.appName = "homy-hmi"});
   if (!instance)
@@ -162,6 +165,6 @@ std::unique_ptr<Backend> makeVulkanBackend(GLFWwindow* window)
     out("error the Rive renderer cannot run on this GPU (Vulkan)");
     return nullptr;
   }
-  return std::make_unique<VulkanBackend>(window, std::move(instance), std::move(device), std::move(context));
+  return std::make_unique<VulkanBackend>(window, opt, std::move(instance), std::move(device), std::move(context));
 }
 } // namespace homy

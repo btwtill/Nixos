@@ -24,7 +24,12 @@
 // GL only:
 //   --present copy (HOMY_HMI_PRESENT=copy): render offscreen, hand the frame
 //     to the window as an X11 image instead of swapping the GL window surface.
-//   --msaa N (HOMY_HMI_MSAA): a multisampled target with N samples for Rive.
+//
+// How Rive draws (its "interlock mode", printed once at the start). Rive picks
+// the best the GPU offers; these force another one, to compare their speed:
+//   --msaa N (HOMY_HMI_MSAA): a multisampled target with N samples (mode msaa).
+//   HOMY_HMI_CLOCKWISE=1: the clockwise modes, where the GPU has them.
+//   HOMY_HMI_NO_RASTER_ORDERING=1: atomic mode instead of raster ordering.
 //   HOMY_HMI_GLDEBUG=1: GL extensions + driver messages + glGetError on stderr.
 //
 // --fps N (HOMY_HMI_FPS, default 60): at most N frames per second while
@@ -102,6 +107,7 @@ struct Options
   bool vulkan = false;
   int fps = 60;
   bool stats = false;
+  bool clockwise = false, noRasterOrdering = false;
   homy::BackendOptions backend;
 };
 
@@ -149,6 +155,8 @@ Options parseArgs(int argc, char** argv)
   if (o.fps < 1)
     o.fps = 60;
   o.stats = !env("HOMY_HMI_STATS").empty();
+  o.clockwise = !env("HOMY_HMI_CLOCKWISE").empty();
+  o.noRasterOrdering = !env("HOMY_HMI_NO_RASTER_ORDERING").empty();
   return o;
 }
 
@@ -221,7 +229,7 @@ int main(int argc, char** argv)
   }
   step(std::string("window created, backend ") + (opt.vulkan ? "Vulkan" : "OpenGL ES"));
   std::unique_ptr<homy::Backend> backend =
-      opt.vulkan ? homy::makeVulkanBackend(window) : homy::makeGLBackend(window, opt.backend);
+      opt.vulkan ? homy::makeVulkanBackend(window, opt.backend) : homy::makeGLBackend(window, opt.backend);
   if (!backend)
     return 1;
   gpu::RenderContext* renderContext = backend->context();
@@ -402,6 +410,7 @@ int main(int argc, char** argv)
   double nextFrame = 0;                 // glfwGetTime() the next frame may start at
   double lastAdvance = glfwGetTime();   // … the state machine was last advanced at
   bool animating = true;
+  bool modeReported = false;
   struct
   {
     int frames = 0;
@@ -467,7 +476,27 @@ int main(int argc, char** argv)
         .loadAction = gpu::LoadAction::clear,
         .clearColor = opt.background,
         .msaaSampleCount = backend->msaaSampleCount(),
+        .disableRasterOrdering = opt.noRasterOrdering,
+        .clockwiseFillOverride = opt.clockwise,
     });
+    if (!modeReported)
+    {
+      modeReported = true;
+      const char* mode = "?";
+      switch (renderContext->frameInterlockMode())
+      {
+        case gpu::InterlockMode::rasterOrdering: mode = "rasterOrdering"; break;
+        case gpu::InterlockMode::atomics: mode = "atomics"; break;
+        case gpu::InterlockMode::clockwise: mode = "clockwise"; break;
+        case gpu::InterlockMode::clockwiseAtomic: mode = "clockwiseAtomic"; break;
+        case gpu::InterlockMode::depthStencil: mode = "msaa (depthStencil)"; break;
+      }
+      const gpu::PlatformFeatures& f = renderContext->platformFeatures();
+      step(std::string("Rive draw mode: ") + mode + "  (GPU offers:" +
+           (f.supportsRasterOrderingMode ? " rasterOrdering" : "") + (f.supportsAtomicMode ? " atomics" : "") +
+           (f.supportsClockwiseMode ? " clockwise" : "") +
+           (f.supportsClockwiseAtomicMode ? " clockwiseAtomic" : "") + " msaa)");
+    }
     RiveRenderer renderer(renderContext);
     renderer.save();
     renderer.transform(Mat2D::fromScale(static_cast<float>(fbWidth) / opt.width,
