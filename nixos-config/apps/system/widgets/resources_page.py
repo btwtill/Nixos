@@ -1,4 +1,4 @@
-"""Page 2 — live CPU, memory, temperature, storage, network and top processes."""
+"""Page 2 — live CPU, GPU, memory, temperature, storage, network and top processes."""
 from __future__ import annotations
 
 from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
@@ -78,6 +78,7 @@ class ResourcesPage(QWidget):
         grid.setSpacing(10)
 
         self._cpu   = StatTile("CPU", sparkline=True)
+        self._gpu   = StatTile("GPU", sparkline=True)
         self._mem   = StatTile("Memory", sparkline=True)
         self._temp  = StatTile("Temperature")
         self._disk  = StatTile("Storage /")
@@ -87,12 +88,13 @@ class ResourcesPage(QWidget):
         self._procs = _ProcessCard()
 
         grid.addWidget(self._cpu,   0, 0)
-        grid.addWidget(self._mem,   0, 1)
-        grid.addWidget(self._temp,  0, 2)
-        grid.addWidget(self._cores, 0, 3, 2, 1)
-        grid.addWidget(self._disk,  1, 0)
-        grid.addWidget(self._net,   1, 1)
-        grid.addWidget(self._sys,   1, 2)
+        grid.addWidget(self._gpu,   0, 1)
+        grid.addWidget(self._mem,   0, 2)
+        grid.addWidget(self._cores, 0, 3)
+        grid.addWidget(self._temp,  1, 0)
+        grid.addWidget(self._disk,  1, 1)
+        grid.addWidget(self._net,   1, 2)
+        grid.addWidget(self._sys,   1, 3)
         grid.addWidget(self._procs, 2, 0, 1, 4)
         for c in range(4):
             grid.setColumnStretch(c, 1)
@@ -105,6 +107,19 @@ class ResourcesPage(QWidget):
         self._cpu.sub.setText(f"{s.cpu_freq_mhz:.0f} MHz" if s.cpu_freq_mhz else f"{len(s.per_core)} cores")
         self._cpu.spark.push(s.cpu_percent / 100)
         self._cpu.bar.set_value(s.cpu_percent / 100)
+
+        # GPU: the busiest of the V3D's job queues; "render" is the drawing itself.
+        if s.gpu_percent is not None:
+            self._gpu.value.setText(f"{s.gpu_percent:.0f}%")
+            self._gpu.sub.setText(" · ".join(f"{q} {v:.0f}%" for q, v in s.gpu_queues.items() if v >= 0.5)
+                                  or "idle")
+            self._gpu.spark.push(s.gpu_percent / 100)
+            self._gpu.bar.set_value(s.gpu_percent / 100)
+        else:
+            self._gpu.value.setText("n/a")
+            self._gpu.sub.setText("no GPU statistics")
+            self._gpu.spark.push(0)
+            self._gpu.bar.set_value(0)
 
         mem_frac = s.mem_used / s.mem_total if s.mem_total else 0
         self._mem.value.setText(f"{mem_frac * 100:.0f}%")

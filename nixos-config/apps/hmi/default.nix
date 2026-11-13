@@ -6,14 +6,15 @@
 # hmi.cpp). Two GPU backends (backend.hpp): OpenGL ES through EGL, loaded at
 # runtime (glad) from the system's Mesa, and Vulkan through the Vulkan loader
 # (dlopen'ed by rive_vk_bootstrap by name; linked here too, so it is a real
-# dependency and Nix keeps its path in the binary; drivers from /run/opengl-driver). libX11 hands offscreen frames to the window (x11_copy.cpp).
+# dependency and Nix keeps its path in the binary; drivers from /run/opengl-driver).
+# libX11 + libXext (MIT-SHM) hand offscreen frames to the window (x11_copy.cpp).
 pkgs.clangStdenv.mkDerivation {
   pname   = "homy-hmi";
-  version = "0.2.0";
+  version = "0.3.0";
 
   src = ./.;
 
-  buildInputs = [ pkgs.glfw pkgs.xorg.libX11 pkgs.vulkan-loader ];
+  buildInputs = [ pkgs.glfw pkgs.xorg.libX11 pkgs.xorg.libXext pkgs.vulkan-loader ];
 
   # keep symbols while the native path is new: backtraces with function names
   dontStrip = true;
@@ -33,7 +34,7 @@ pkgs.clangStdenv.mkDerivation {
       ${rive}/share/rive_vk_bootstrap/src/*.cpp \
       -o homy-hmi \
       -L${rive}/lib -Wl,--start-group -lrive_pls_renderer -lrive -lrive_yoga -lrive_harfbuzz -lrive_sheenbidi -Wl,--end-group \
-      -lglfw -lX11 -ldl -lpthread \
+      -lglfw -lX11 -lXext -ldl -lpthread \
       -Wl,--no-as-needed -lvulkan -Wl,--as-needed
     runHook postBuild
   '';

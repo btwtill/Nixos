@@ -58,6 +58,9 @@
   # don't reach the screen under X11 (not even Mesa's es2gears). Vulkan renders
   # offscreen; the frame goes to the window as an X11 image.
   environment.sessionVariables.HOMY_HMI_BACKEND = "vulkan";
+  # While the HMI is being tuned: homy-hmi reports where its frames' time goes
+  # (lines "homy-hmi: stats: …" in ~/.local/state/homy-shell.log).
+  environment.sessionVariables.HOMY_HMI_STATS = "1";
 
   services.getty.autologinUser = "defaultUser";
 

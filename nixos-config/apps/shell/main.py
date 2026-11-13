@@ -2,8 +2,10 @@
 
 The drawing is done by homy-hmi (apps/hmi, Rive's native renderer); this
 process only drives it over its stdin/stdout. One homy-hmi plays homy-neo-hmi,
-the whole screen in one file: top bar, sidebar, bottom bar, and the app area
-the apps are tiled over (Qtile keeps the HMI window below them).
+the whole screen in one file: top bar, sidebar, bottom bar, and the app area.
+The app area shows the file's own apps (so far Home, see home.py: `app` picks
+which, by index); every other app is a window Qtile tiles over that area (it
+keeps the HMI window below them).
 
   homy-hmi → here    "number topbar/activeIndex 1"   a button was tapped
   here → homy-hmi    "number sidebar/activeIndex 2"  highlight the current group
@@ -26,6 +28,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from home import Home
+
 UI = Path(os.environ.get("HOMY_UI_DIR", "/run/current-system/sw/share/homy/ui"))
 HMI = os.environ.get("HOMY_HMI", "homy-hmi")
 PORT = 47811                      # Qtile's setgroup hook talks to this
@@ -44,6 +48,10 @@ NAV = {
     "bottombar": {0: "7", 1: "6"},                # Bluetooth, system
 }
 MENU = ("topbar", 1)              # also highlighted while a launcher app (app:<id>) is shown
+
+# Apps inside the Rive file: Qtile group → HMIInterface/app (which one the app
+# area shows). Any other group: none (1 = no app; windows cover the area).
+RIVE_APPS = {"1": 0}              # Home
 
 
 def log(msg: str):
@@ -81,8 +89,10 @@ class Hmi:
         self.group = "1"                              # Qtile starts on group 1 = Home
         self.index = {bar: active_index(bar, self.group) for bar in NAV}
         self.theme: dict[str, str] = {}
+        self.home = Home(self.send, log)
 
     def start(self):
+        self.home.start()
         threading.Thread(target=self._run, daemon=True).start()
         threading.Thread(target=self._clock, daemon=True).start()
 
@@ -101,12 +111,14 @@ class Hmi:
         for bar in NAV:
             self.index[bar] = active_index(bar, group)
             self.send(f"number {bar}/activeIndex {self.index[bar]}")
+        self.send(f"number app {RIVE_APPS.get(group, 1)}")
 
     def set_theme(self, tokens: dict[str, str]):
         self.theme = tokens
         for name, hex_ in tokens.items():
             self.send(f"color Theme/{name} {hex_}")
         if "wallpaper" in tokens:
+            self.send(f"color Theme/background {tokens['wallpaper']}")   # the file's Wallpaper artboard
             self.send(f"background {tokens['wallpaper'][:7]}")
 
     def _clock(self):
@@ -137,6 +149,7 @@ class Hmi:
             self.show_group(self.group)
             self.set_theme(self.theme)
             self.send(f"string bottombar/time {time.strftime('%H:%M')}")
+            self.home.ready()
             return
         path, _, value = rest.partition(" ")
         bar, _, prop = path.partition("/")
@@ -145,6 +158,8 @@ class Hmi:
             if index != self.index[bar]:
                 self.index[bar] = index
                 threading.Thread(target=navigate, args=(bar, index), daemon=True).start()
+        elif kind == "number" and self.home.on_number(path, float(value)):
+            pass
         else:
             log(line)
 

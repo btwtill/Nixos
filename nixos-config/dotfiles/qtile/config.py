@@ -18,6 +18,11 @@ import urllib.request
 import socket
 _hostname = socket.gethostname()
 
+# Hosts with the Rive HMI (homy-shell → homy-hmi, see "Homy HMI" below): the
+# bars and the Home page are drawn by it. The others (Pi 3B+, laptop) keep
+# Qtile's own SVG bars and the PyQt home-app.
+HMI_HOSTS = {"vm", "pi5"}
+
 mod = "mod4"
 terminal = guess_terminal()
 
@@ -163,7 +168,7 @@ class SvgButton(base._Widget):
 # Replace terminal with a specific app path when ready.
 # ----------------------
 startup_layout = [
-    ("1", "home-app"),    # group 1 — home control UI
+    ("1", "home-app"),    # group 1 — home control UI (with the HMI: its Home page, no window)
     ("2", "lights-app"),  # group 2 — lights control UI
     ("3", terminal),      # group 3
     ("4", "music-app"),   # group 4 — music player
@@ -188,6 +193,9 @@ _NAMED_GROUPS = {
 
 # Unnamed windows (terminals) fill remaining groups in order.
 _startup_queue = deque(["3", "5"])
+
+if _hostname in HMI_HOSTS:
+    startup_layout = [(group, cmd) for group, cmd in startup_layout if cmd != "home-app"]
 
 # ----------------------
 # Launcher apps — every app started from the app menu gets its own group
@@ -320,9 +328,8 @@ def rescue_launcher_apps():
 # window. The bars of the screen are Gaps: they keep the HMI's bars free and
 # draw nothing, the apps are tiled over the HMI's app area.
 # Group changes are reported to the shell to highlight the matching button.
-# Hosts without homy-shell (Pi 3B+, laptop) keep Qtile's own SVG bars.
+# Group 1 has no window: there the HMI's own Home page shows in the app area.
 # ----------------------
-HMI_HOSTS = {"vm", "pi5"}
 HMI_TITLE = "Homy HMI"
 HMI_URL   = "http://127.0.0.1:47811/group?name="
 

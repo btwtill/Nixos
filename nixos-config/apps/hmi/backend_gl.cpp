@@ -89,16 +89,26 @@ public:
 
   void prepareFrame() override { m_impl->invalidateGLState(); }
 
+  void invalidate() override
+  {
+    if (m_copy)
+      m_copy->invalidate();
+  }
+
   bool finishFrame() override
   {
+    const double t0 = nowMs();
     m_context->flush({.renderTarget = m_target.get()});
     m_impl->unbindGLInternalResources();
     if (m_opt.glDebug)
       for (GLenum err; (err = glGetError()) != GL_NO_ERROR;)
         std::cerr << "gl: glGetError 0x" << std::hex << err << std::dec << std::endl;
+    const double t1 = nowMs();
+    m_times.flush = t1 - t0;
     if (!m_opt.copyPresent)
     {
       glfwSwapBuffers(m_window);
+      m_times.gpu = 0, m_times.present = nowMs() - t1, m_times.changed = 1;
       return true;
     }
     GLuint readFbo = m_fbo;
@@ -114,7 +124,10 @@ public:
     glBindFramebuffer(GL_READ_FRAMEBUFFER, readFbo);
     glReadPixels(0, 0, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, m_pixels.data());
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    m_copy->present(m_pixels);
+    const double t2 = nowMs();
+    m_times.gpu = t2 - t1;
+    m_times.changed = m_copy->present({m_pixels.data(), m_width * 4, /*bgra*/ false, /*bottomUp*/ true});
+    m_times.present = nowMs() - t2;
     return true;
   }
 

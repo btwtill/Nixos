@@ -4,6 +4,7 @@ Everything here is blocking and is called from the background poller thread
 in main.py, never from the Qt thread.
 """
 from __future__ import annotations
+import glob
 import os
 import subprocess
 import time
@@ -168,6 +169,8 @@ class ResourceSnapshot:
     disk_used: int
     disk_total: int
     temp_c: float | None
+    gpu_percent: float | None            # busiest GPU queue, None: no GPU statistics
+    gpu_queues: dict[str, float]         # queue name → % busy (render, bin, …)
     load_avg: tuple[float, float, float]
     uptime_s: float
     net_rx_bps: float
@@ -190,8 +193,55 @@ def _cpu_temp() -> float | None:
     return None
 
 
+class GpuSampler:
+    """How busy the Raspberry Pi's GPU (V3D) is, from the kernel's statistics.
+
+    The v3d driver keeps, per job queue (bin, render, tfu, csd, …), the time
+    the GPU spent working on it:
+
+        queue     timestamp     jobs    runtime
+        render    239043069420  22620   80593970336      (nanoseconds)
+
+    Busy share of a queue = runtime gained / time passed between two samples.
+    Hosts without that file (the VM: software rendering) report None.
+    """
+    PATHS = ("/sys/devices/platform/*/*.v3d/gpu_stats",
+             "/sys/devices/platform/*.v3d/gpu_stats",
+             "/sys/class/drm/card*/device/gpu_stats")
+
+    def __init__(self):
+        self._path = next((p for pattern in self.PATHS for p in glob.glob(pattern)), None)
+        self._last = self._read()
+
+    def _read(self) -> dict[str, tuple[int, int]]:
+        """queue → (timestamp ns, runtime ns)"""
+        if not self._path:
+            return {}
+        queues = {}
+        try:
+            with open(self._path) as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 4 and parts[1].isdigit() and parts[3].isdigit():
+                        queues[parts[0]] = (int(parts[1]), int(parts[3]))
+        except OSError:
+            pass
+        return queues
+
+    def sample(self) -> tuple[float | None, dict[str, float]]:
+        now, last = self._read(), self._last
+        self._last = now
+        busy = {}
+        for queue, (t, runtime) in now.items():
+            if queue in last and t > last[queue][0]:
+                share = (runtime - last[queue][1]) / (t - last[queue][0])
+                busy[queue] = min(max(share, 0.0), 1.0) * 100
+        return (max(busy.values()) if busy else None), busy
+
+
 class ResourceSampler:
     def __init__(self):
+        self._gpu = GpuSampler()
         self._last_net = psutil.net_io_counters()
         self._last_t = time.monotonic()
         psutil.cpu_percent(None)
@@ -214,6 +264,7 @@ class ResourceSampler:
         mem  = psutil.virtual_memory()
         swap = psutil.swap_memory()
         disk = psutil.disk_usage("/")
+        gpu_percent, gpu_queues = self._gpu.sample()
 
         return ResourceSnapshot(
             cpu_percent=psutil.cpu_percent(None),
@@ -226,6 +277,8 @@ class ResourceSampler:
             disk_used=disk.used,
             disk_total=disk.total,
             temp_c=_cpu_temp(),
+            gpu_percent=gpu_percent,
+            gpu_queues=gpu_queues,
             load_avg=os.getloadavg(),
             uptime_s=time.time() - psutil.boot_time(),
             net_rx_bps=max(rx, 0.0),

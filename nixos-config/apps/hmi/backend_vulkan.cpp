@@ -4,6 +4,11 @@
 // draws broken geometry, and the X11 copy sidesteps its GPU → X11 window path.
 // Built after Rive's own headless test window
 // (tests/common/testing_window_vulkan_texture.cpp).
+//
+// The frame is rendered in X11's byte order (BGRA) and read straight out of
+// the mapped readback buffer, so the only per-frame copy on the CPU is the one
+// X11Copy makes of the rows that changed. HOMY_HMI_VK_FORMAT=rgba renders RGBA
+// instead (converted per pixel), should a driver not take BGRA.
 #include "backend.hpp"
 
 #include "rive/renderer/vulkan/render_context_vulkan_impl.hpp"
@@ -15,13 +20,15 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
+#include <cstdlib>
+#include <cstring>
+
 using namespace rive;
 
 namespace homy
 {
 namespace
 {
-constexpr VkFormat kFormat = VK_FORMAT_R8G8B8A8_UNORM;
 constexpr VkImageUsageFlags kUsage =
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
@@ -35,7 +42,11 @@ public:
       : m_instance(std::move(instance)), m_device(std::move(device)), m_context(std::move(context)),
         m_copy(window)
   {
-    step("present: Vulkan offscreen image → X11 image");
+    const char* format = std::getenv("HOMY_HMI_VK_FORMAT");
+    if (format && std::strcmp(format, "rgba") == 0)
+      m_format = VK_FORMAT_R8G8B8A8_UNORM;
+    step(std::string("present: Vulkan offscreen image (") +
+         (m_format == VK_FORMAT_B8G8R8A8_UNORM ? "BGRA" : "RGBA") + ") → X11 image");
   }
 
   ~VulkanBackend() override
@@ -56,20 +67,23 @@ public:
         rive_vkb::VulkanHeadlessFrameSynchronizer::Options{
             .width = static_cast<uint32_t>(width),
             .height = static_cast<uint32_t>(height),
-            .imageFormat = kFormat,
+            .imageFormat = m_format,
             .imageUsageFlags = kUsage,
             .initialFrameNumber = frame,
         });
     if (!m_sync)
       out("error cannot create the offscreen Vulkan image");
-    m_target = impl()->makeRenderTarget(width, height, kFormat, kUsage);
+    m_target = impl()->makeRenderTarget(width, height, m_format, kUsage);
     m_copy.resize(width, height);
   }
+
+  void invalidate() override { m_copy.invalidate(); }
 
   bool finishFrame() override
   {
     if (!m_sync)
       return false;
+    const double t0 = nowMs();
     if (!m_sync->isFrameStarted())
     {
       if (m_sync->beginFrame() != VK_SUCCESS)
@@ -86,9 +100,16 @@ public:
     m_sync->queueImageCopy(&lastAccess);
     if (m_sync->endFrame(lastAccess) != VK_SUCCESS)
       return fail("endFrame");
-    if (m_sync->getPixelsFromLastImageCopy(&m_pixels) != VK_SUCCESS)
+    const double t1 = nowMs();
+    // blocks until the GPU has drawn the frame and copied it into the buffer
+    rive_vkb::VulkanFrameSynchronizer::MappedPixelRead read;
+    if (m_sync->waitForPixelRead(&read) != VK_SUCCESS)
       return fail("reading the frame back");
-    m_copy.present(m_pixels);   // RGBA, bottom row first
+    const double t2 = nowMs();
+    m_times.changed = m_copy.present({read.data, static_cast<int>(read.strideBytes),
+                                      /*bgra*/ read.format == VK_FORMAT_B8G8R8A8_UNORM, /*bottomUp*/ false});
+    m_sync->finishPixelRead();
+    m_times.flush = t1 - t0, m_times.gpu = t2 - t1, m_times.present = nowMs() - t2;
     return true;
   }
 
@@ -109,7 +130,7 @@ private:
   std::unique_ptr<rive_vkb::VulkanHeadlessFrameSynchronizer> m_sync;
   rcp<gpu::RenderTargetVulkanImpl> m_target;
   X11Copy m_copy;
-  std::vector<uint8_t> m_pixels;
+  VkFormat m_format = VK_FORMAT_B8G8R8A8_UNORM;
 };
 } // namespace
 

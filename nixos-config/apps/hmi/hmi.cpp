@@ -26,6 +26,12 @@
 //     to the window as an X11 image instead of swapping the GL window surface.
 //   --msaa N (HOMY_HMI_MSAA): a multisampled target with N samples for Rive.
 //   HOMY_HMI_GLDEBUG=1: GL extensions + driver messages + glGetError on stderr.
+//
+// --fps N (HOMY_HMI_FPS, default 60): at most N frames per second while
+//   something animates; input in between is collected into the next frame.
+// HOMY_HMI_STATS=1: every 2 s of animation one line on stderr saying where the
+//   frames' time went: "stats: 58 fps, frame 9.1 ms (max 14.0): advance 0.4,
+//   draw 1.9, flush 0.8, gpu 3.1, present 2.9; changed 4%".
 
 #include "backend.hpp"
 
@@ -45,6 +51,7 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -76,6 +83,11 @@ void step(const std::string& what)
 {
   std::cerr << "homy-hmi: " << what << std::endl;
 }
+
+double nowMs()
+{
+  return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 } // namespace homy
 
 namespace
@@ -88,6 +100,8 @@ struct Options
   Alignment align = Alignment::center;
   ColorInt background = 0xff1e1e1e;
   bool vulkan = false;
+  int fps = 60;
+  bool stats = false;
   homy::BackendOptions backend;
 };
 
@@ -122,6 +136,7 @@ Options parseArgs(int argc, char** argv)
     else if (k == "--backend") o.vulkan = v == "vulkan";
     else if (k == "--present") o.backend.copyPresent = v == "copy";
     else if (k == "--msaa") o.backend.msaa = std::atoi(v.c_str());
+    else if (k == "--fps") o.fps = std::atoi(v.c_str());
   }
   auto env = [](const char* name) { const char* v = std::getenv(name); return std::string(v ? v : ""); };
   o.vulkan = o.vulkan || env("HOMY_HMI_BACKEND") == "vulkan";
@@ -129,6 +144,11 @@ Options parseArgs(int argc, char** argv)
   if (!o.backend.msaa)
     o.backend.msaa = std::atoi(env("HOMY_HMI_MSAA").c_str());
   o.backend.glDebug = !env("HOMY_HMI_GLDEBUG").empty();
+  if (!env("HOMY_HMI_FPS").empty())
+    o.fps = std::atoi(env("HOMY_HMI_FPS").c_str());
+  if (o.fps < 1)
+    o.fps = 60;
+  o.stats = !env("HOMY_HMI_STATS").empty();
   return o;
 }
 
@@ -281,11 +301,13 @@ int main(int argc, char** argv)
     StateMachineInstance* machine;
     std::function<Mat2D()> view;
     bool dirty = true;
+    bool exposed = false;
   } ctx{machine.get(), viewTransform};
   glfwSetWindowUserPointer(window, &ctx);
   // exposed again (mapped, uncovered): an X11 image isn't kept by the server
   glfwSetWindowRefreshCallback(window, [](GLFWwindow* w) {
-    static_cast<Ctx*>(glfwGetWindowUserPointer(w))->dirty = true;
+    auto* c = static_cast<Ctx*>(glfwGetWindowUserPointer(w));
+    c->dirty = c->exposed = true;
   });
   glfwSetCursorPosCallback(window, [](GLFWwindow* w, double, double) {
     auto* c = static_cast<Ctx*>(glfwGetWindowUserPointer(w));
@@ -374,14 +396,28 @@ int main(int argc, char** argv)
   out("ready " + std::string(artboard->name()) + " " + backend->deviceName());
 
   // ── loop: advance + draw while something moves, otherwise sleep ────────────
-  auto last = std::chrono::steady_clock::now();
+  // At most opt.fps frames per second: input and commands arriving in between
+  // are applied right away and drawn with the next frame.
+  const double frameInterval = 1.0 / opt.fps;
+  double nextFrame = 0;                 // glfwGetTime() the next frame may start at
+  double lastAdvance = glfwGetTime();   // … the state machine was last advanced at
   bool animating = true;
+  struct
+  {
+    int frames = 0;
+    double since = 0, span = 0, last = 0, advance = 0, draw = 0, flush = 0, gpu = 0, present = 0, changed = 0, total = 0, worst = 0;
+  } stats;
   while (!glfwWindowShouldClose(window))
   {
-    if (animating || ctx.dirty)
-      glfwPollEvents();
-    else
+    if (!animating && !ctx.dirty)
+    {
       glfwWaitEvents();   // woken by input, stdin (glfwPostEmptyEvent) or expose
+      lastAdvance = glfwGetTime();   // time spent idle is not animation time
+    }
+    else if (double wait = nextFrame - glfwGetTime(); wait > 0.0005)
+      glfwWaitEventsTimeout(wait);
+    else
+      glfwPollEvents();
 
     std::deque<std::string> lines;
     {
@@ -393,12 +429,16 @@ int main(int argc, char** argv)
 
     if (resize())
       ctx.dirty = true;
-
-    auto now = std::chrono::steady_clock::now();
-    float elapsed = std::chrono::duration<float>(now - last).count();
-    last = now;
     if (!animating && !ctx.dirty)
       continue;
+    const double frameStart = glfwGetTime();
+    if (frameStart < nextFrame - 0.0005)
+      continue;   // woken early: keep collecting input until the frame is due
+    nextFrame = frameStart + frameInterval;
+    const float elapsed = static_cast<float>(frameStart - lastAdvance);
+    lastAdvance = frameStart;
+
+    const double t0 = homy::nowMs();
     animating = machine->advanceAndApply(std::min(elapsed, 0.1f));
     ctx.dirty = false;
 
@@ -414,6 +454,12 @@ int main(int argc, char** argv)
       }
     }
 
+    const double t1 = homy::nowMs();
+    if (ctx.exposed)
+    {
+      backend->invalidate();
+      ctx.exposed = false;
+    }
     backend->prepareFrame();
     renderContext->beginFrame({
         .renderTargetWidth = static_cast<uint32_t>(fbWidth),
@@ -429,7 +475,39 @@ int main(int argc, char** argv)
                        viewTransform());
     artboard->draw(&renderer);
     renderer.restore();
+    const double t2 = homy::nowMs();
     backend->finishFrame();
+
+    if (opt.stats)
+    {
+      const double t3 = homy::nowMs();
+      const homy::FrameTimes& f = backend->frameTimes();
+      if (stats.frames == 0)
+        stats.since = t0;
+      else
+        stats.span += std::min(t0 - stats.last, 100.0);   // pauses don't count against the frame rate
+      stats.last = t0;
+      ++stats.frames;
+      stats.advance += t1 - t0, stats.draw += t2 - t1;
+      stats.flush += f.flush, stats.gpu += f.gpu, stats.present += f.present, stats.changed += f.changed;
+      stats.total += t3 - t0, stats.worst = std::max(stats.worst, t3 - t0);
+      if (t3 - stats.since >= 2000)
+      {
+        const double n = stats.frames;
+        if (stats.frames >= 10)   // not for a lone frame now and then (the clock)
+        {
+          char line[256];
+          std::snprintf(line, sizeof line,
+                        "stats: %.0f fps, frame %.1f ms (max %.1f): advance %.1f, draw %.1f, flush %.1f, "
+                        "gpu %.1f, present %.1f; changed %.0f%%",
+                        stats.span > 0 ? (n - 1) * 1000 / stats.span : 0.0, stats.total / n, stats.worst, stats.advance / n,
+                        stats.draw / n, stats.flush / n, stats.gpu / n, stats.present / n,
+                        100 * stats.changed / n);
+          step(line);
+        }
+        stats = {};
+      }
+    }
   }
   backend.reset();
   glfwTerminate();
