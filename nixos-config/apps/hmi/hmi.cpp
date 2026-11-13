@@ -30,6 +30,8 @@
 //   --msaa N (HOMY_HMI_MSAA): a multisampled target with N samples (mode msaa).
 //   HOMY_HMI_CLOCKWISE=1: the clockwise modes, where the GPU has them.
 //   HOMY_HMI_NO_RASTER_ORDERING=1: atomic mode instead of raster ordering.
+// HOMY_HMI_BENCH=1: redraw every frame even when nothing moves, so the stats
+//   measure the cost of a full frame without anyone tapping.
 //   HOMY_HMI_GLDEBUG=1: GL extensions + driver messages + glGetError on stderr.
 //
 // --fps N (HOMY_HMI_FPS, default 60): at most N frames per second while
@@ -107,7 +109,7 @@ struct Options
   bool vulkan = false;
   int fps = 60;
   bool stats = false;
-  bool clockwise = false, noRasterOrdering = false;
+  bool clockwise = false, noRasterOrdering = false, bench = false;
   homy::BackendOptions backend;
 };
 
@@ -155,6 +157,8 @@ Options parseArgs(int argc, char** argv)
   if (o.fps < 1)
     o.fps = 60;
   o.stats = !env("HOMY_HMI_STATS").empty();
+  o.bench = !env("HOMY_HMI_BENCH").empty();
+  o.stats = o.stats || o.bench;
   o.clockwise = !env("HOMY_HMI_CLOCKWISE").empty();
   o.noRasterOrdering = !env("HOMY_HMI_NO_RASTER_ORDERING").empty();
   return o;
@@ -448,7 +452,7 @@ int main(int argc, char** argv)
     lastAdvance = frameStart;
 
     const double t0 = homy::nowMs();
-    animating = machine->advanceAndApply(std::min(elapsed, 0.1f));
+    animating = machine->advanceAndApply(std::min(elapsed, 0.1f)) || opt.bench;
     ctx.dirty = false;
 
     for (auto& [name, lastValue] : watched)
