@@ -1,4 +1,4 @@
-{ config, pkgs, lib, nixpkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 # Raspberry Pi 5 — same setup as the Pi 3B+ (Qtile + PyQt apps, HA, Matter,
 # AirPlay, Bluetooth). Kernel, firmware, bootloader and the SD-card layout
@@ -68,16 +68,10 @@
   # switch makes every job finish before the next starts (MSAA stays at 6-13 ms
   # per frame). homy-shell hands it to homy-hmi only (apps/shell/main.py).
   # Drop this once a Mesa update fixes it: test without it, glitches gone = fixed.
+  # (Tried 2026-11-13: Mesa 26.2.6 from nixos-unstable did not fix the ring
+  # glitch in MSAA mode, and its LLVM needs glibc 2.44, so this host stays on
+  # its release Mesa.)
   environment.sessionVariables.HOMY_HMI_V3D_DEBUG = "sync";
-  # Newer Mesa (v3dv is part of it) than the release this host is built on,
-  # from the flake's nixos-unstable input, hoping for an upstream fix of the
-  # bug above. Apps load the driver at runtime from /run/opengl-driver, so
-  # nothing else is rebuilt; mkForce wins over nixos-raspberrypi's own choice.
-  # If Vulkan stops working after this (e.g. "GLIBC_2.xx not found" when an app
-  # loads the driver), unstable's Mesa needs a newer glibc than this release:
-  # remove these lines (or boot the previous generation).
-  hardware.graphics.package = lib.mkForce
-    (import nixpkgs { system = pkgs.stdenv.hostPlatform.system; }).mesa;
   # While the HMI is being tuned: homy-hmi reports where its frames' time goes
   # (lines "homy-hmi: stats: …" in ~/.local/state/homy-shell.log).
   environment.sessionVariables.HOMY_HMI_STATS = "1";
