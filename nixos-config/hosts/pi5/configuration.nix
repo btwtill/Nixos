@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, nixpkgs, ... }:
 
 # Raspberry Pi 5 — same setup as the Pi 3B+ (Qtile + PyQt apps, HA, Matter,
 # AirPlay, Bluetooth). Kernel, firmware, bootloader and the SD-card layout
@@ -62,6 +62,22 @@
   # frame, against 38 ms in the "atomics" mode Rive picks by itself (the V3D has
   # no raster-ordering mode, and atomics costs it several passes over the screen).
   environment.sessionVariables.HOMY_HMI_MSAA = "4";
+  # Workaround for a synchronisation bug in the V3D Vulkan driver (v3dv): GPU
+  # jobs of one frame overlap and Rive's draw pass reads geometry still being
+  # written, so shapes of earlier frames flicker on screen. Mesa's "sync" debug
+  # switch makes every job finish before the next starts (MSAA stays at 6-13 ms
+  # per frame). homy-shell hands it to homy-hmi only (apps/shell/main.py).
+  # Drop this once a Mesa update fixes it: test without it, glitches gone = fixed.
+  environment.sessionVariables.HOMY_HMI_V3D_DEBUG = "sync";
+  # Newer Mesa (v3dv is part of it) than the release this host is built on,
+  # from the flake's nixos-unstable input, hoping for an upstream fix of the
+  # bug above. Apps load the driver at runtime from /run/opengl-driver, so
+  # nothing else is rebuilt; mkForce wins over nixos-raspberrypi's own choice.
+  # If Vulkan stops working after this (e.g. "GLIBC_2.xx not found" when an app
+  # loads the driver), unstable's Mesa needs a newer glibc than this release:
+  # remove these lines (or boot the previous generation).
+  hardware.graphics.package = lib.mkForce
+    (import nixpkgs { system = pkgs.stdenv.hostPlatform.system; }).mesa;
   # While the HMI is being tuned: homy-hmi reports where its frames' time goes
   # (lines "homy-hmi: stats: …" in ~/.local/state/homy-shell.log).
   environment.sessionVariables.HOMY_HMI_STATS = "1";

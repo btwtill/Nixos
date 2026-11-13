@@ -129,11 +129,16 @@ class Hmi:
     def _run(self):
         cmd = [HMI, "--riv", str(UI / "riv" / f"{RIV}.riv"), "--artboard", ARTBOARD,
                "--title", TITLE, "--size", "1024x600", "--fit", "layout"]
+        # HOMY_HMI_V3D_DEBUG (set by the host config) becomes V3D_DEBUG for
+        # homy-hmi only, so a Mesa debug switch never slows down other apps.
+        env = dict(os.environ)
+        if os.environ.get("HOMY_HMI_V3D_DEBUG"):
+            env["V3D_DEBUG"] = os.environ["HOMY_HMI_V3D_DEBUG"]
         while True:
             started = time.monotonic()
             with self.lock:
                 self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                             text=True, bufsize=1)
+                                             text=True, bufsize=1, env=env)
             for line in self.proc.stdout:
                 self._handle(line.strip())
             log(f"homy-hmi exited ({self.proc.wait()})")
