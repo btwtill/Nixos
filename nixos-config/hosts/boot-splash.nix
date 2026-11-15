@@ -7,6 +7,10 @@
     enable = true;
     theme = "homy";
     themePackages = [ (pkgs.callPackage ../apps/boot-splash {}) ];
+    # Plymouth doubles everything on screens it takes for high-DPI, and the
+    # small 1024x600 panel counts as one going by its physical size: the splash
+    # then comes out twice as big and half off the screen.
+    extraConfig = "DeviceScale=1";
   };
 
   # Only errors reach the screen (nixos-raspberrypi sets 7: everything).
@@ -18,6 +22,7 @@
     "vt.global_cursor_default=0"       # no blinking text cursor
     "udev.log_level=3" "rd.udev.log_level=3"
     "systemd.show_status=auto" "rd.systemd.show_status=auto"   # service list only if something fails
+    "plymouth.force-scale=1"           # same as DeviceScale=1, for the part of the boot before the config is read
     "plymouth.ignore-serial-consoles"  # the Pi's console=serial0 would otherwise keep the splash off the screen
   ];
 }
