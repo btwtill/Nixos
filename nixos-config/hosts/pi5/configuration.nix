@@ -8,6 +8,7 @@
 {
   imports = [
     ../../apps/theme/module.nix   # homy-theme colour service (user service)
+    ../boot-splash.nix            # quiet boot with a splash graphic
   ];
 
   nixpkgs.overlays = [
