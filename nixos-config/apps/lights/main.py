@@ -282,28 +282,17 @@ class LightsWidget(QWidget):
 
         # HA state
         self._ha_lights: list[dict] = []           # {"entity_id": ..., "friendly_name": ...}
-        self._pending_brightness: dict[str, float] = {}
-        self._pending_color: dict[str, tuple[float, float]] = {}
 
         # Animation timer (~60 fps)
         self._anim_timer = QTimer(self)
         self._anim_timer.setInterval(16)
         self._anim_timer.timeout.connect(self._animate)
 
-        # HA client + debounce timers
+        # HA client; changes go out through one sender that fades them (ha_client.LightSender)
         self._ha = _hac.HAClient(_cfg.HA_URL, _cfg.HA_TOKEN)
+        self._sender = _hac.LightSender(self._ha)
         self._ha_lights_loaded.connect(self._apply_ha_lights)
         self._ha_state_fetched.connect(self._apply_ha_state)
-
-        self._brightness_debounce = QTimer(self)
-        self._brightness_debounce.setSingleShot(True)
-        self._brightness_debounce.setInterval(150)
-        self._brightness_debounce.timeout.connect(self._send_brightness)
-
-        self._color_debounce = QTimer(self)
-        self._color_debounce.setSingleShot(True)
-        self._color_debounce.setInterval(150)
-        self._color_debounce.timeout.connect(self._send_color)
 
         # Retry fetching the light list every 10 s until it succeeds,
         # then settle into a 60 s refresh cadence.
@@ -388,23 +377,14 @@ class LightsWidget(QWidget):
         self._ha_lights = lights
         self.update()
 
-    def _send_brightness(self):
-        pending, self._pending_brightness = self._pending_brightness, {}
-        for eid, v in pending.items():
-            threading.Thread(
-                target=self._ha.set_light_brightness,
-                args=(eid, round(v * 100)),
-                daemon=True,
-            ).start()
-
-    def _send_color(self):
-        pending, self._pending_color = self._pending_color, {}
-        for eid, (hue, sat) in pending.items():
-            threading.Thread(
-                target=self._ha.set_light_color,
-                args=(eid, hue, sat),
-                daemon=True,
-            ).start()
+    def _send_selected(self, mode: str, final: bool = False):
+        """The selected lights' intensity ('arc') or colour ('color') → Home Assistant."""
+        for l in self._lights:
+            if l.selected and l.ha_name:
+                if mode == 'arc':
+                    self._sender.update(l.ha_name, brightness=l.intensity, final=final)
+                else:
+                    self._sender.update(l.ha_name, hs=(l.hue, l.saturation), final=final)
 
     def _sync_light_state(self, entity_id: str):
         state = self._ha.get_light_full_state(entity_id)
@@ -619,20 +599,16 @@ class LightsWidget(QWidget):
             for l in self._lights:
                 if l.selected:
                     l.intensity = v
-                    if l.ha_name:
-                        self._pending_brightness[l.ha_name] = v
             self.update()
-            self._brightness_debounce.start()
+            self._send_selected('arc')
         elif self._panel_drag_mode == 'color':
             hue, sat = self._color_from_pos(pos, px)
             for l in self._lights:
                 if l.selected:
                     l.hue = hue
                     l.saturation = sat
-                    if l.ha_name:
-                        self._pending_color[l.ha_name] = (hue, sat)
             self.update()
-            self._color_debounce.start()
+            self._send_selected('color')
 
     # ── Interaction ───────────────────────────────────────────────────────────
 
@@ -752,6 +728,7 @@ class LightsWidget(QWidget):
         pos = ev.position()
 
         if self._panel_drag_mode is not None:
+            self._send_selected(self._panel_drag_mode, final=True)   # where the finger let go, with a full fade
             self._panel_drag_mode = None
             self._schedule_save()
             return
@@ -1122,10 +1099,8 @@ class LightsWidget(QWidget):
                     l.intensity  = entry["intensity"]
                     l.hue        = entry["hue"]
                     l.saturation = entry["saturation"]
-            self._pending_brightness[eid] = entry["intensity"]
-            self._pending_color[eid]      = (entry["hue"], entry["saturation"])
-        self._brightness_debounce.start()
-        self._color_debounce.start()
+            self._sender.update(eid, brightness=entry["intensity"],
+                                hs=(entry["hue"], entry["saturation"]), final=True)
         self.update()
 
     def _save_scenes(self):

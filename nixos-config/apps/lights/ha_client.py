@@ -117,3 +117,82 @@ class HAClient:
             "light", "turn_on",
             {"entity_id": entity_id, "hs_color": [round(hue, 1), round(saturation * 100, 1)]},
         )
+
+
+class LightSender:
+    """Sends light changes to Home Assistant so the lights fade smoothly.
+
+    What made changes jump before, and what this does instead:
+      - no `transition` was sent, so each light used its integration's default
+        (often: none). Every call here carries one.
+      - brightness and colour went out as two separate calls whose fades cut
+        each other off. Here they go out together, in one call.
+      - a drag sent nothing until the finger paused (debounce), then one big
+        step. Here a drag sends the latest value every `interval` seconds,
+        with a fade as long as that interval, so the steps blend into one move.
+      - every value went out on its own thread, so an older value could arrive
+        after a newer one and the light jumped back. Here one thread sends
+        everything in order, and only the latest value per light.
+
+    Lights whose integration can't fade (no TRANSITION feature in Home
+    Assistant, e.g. some Govee/Tuya bulbs) still step; that is the bulb.
+    """
+
+    DRAG_FADE = 0.4     # s: fade per step while dragging (a bit over `interval`, so they overlap)
+    FINAL_FADE = 0.8    # s: fade for a finished change (drag released, scene applied)
+
+    def __init__(self, ha: HAClient, interval: float = 0.3):
+        import threading
+        self._ha, self._interval = ha, interval
+        self._wake = threading.Condition()
+        self._pending: dict[str, dict] = {}     # entity → {"brightness": 0-1, "hs": (h, s), "final": bool}
+        self._last: dict[str, float] = {}       # entity → when it was last sent
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def update(self, entity_id: str, brightness: float | None = None,
+               hs: tuple[float, float] | None = None, final: bool = False):
+        """Queue a change; values not given stay as they are on the light."""
+        with self._wake:
+            p = self._pending.setdefault(entity_id, {"final": False})
+            if brightness is not None:
+                p["brightness"] = brightness
+            if hs is not None:
+                p["hs"] = hs
+            p["final"] = p["final"] or final
+            self._wake.notify()
+
+    def _run(self):
+        import time
+        while True:
+            with self._wake:
+                while True:
+                    now = time.monotonic()
+                    # a light is due once its interval since the last send has passed;
+                    # a final value doesn't wait (the drag is over)
+                    due = [e for e, p in self._pending.items()
+                           if p["final"] or now - self._last.get(e, 0) >= self._interval]
+                    if due:
+                        break
+                    if self._pending:
+                        wait = min(self._interval - (now - self._last.get(e, 0)) for e in self._pending)
+                        self._wake.wait(max(wait, 0.01))
+                    else:
+                        self._wake.wait()
+                batch = {e: self._pending.pop(e) for e in due}
+            for entity_id, p in batch.items():
+                self._last[entity_id] = time.monotonic()
+                self._send(entity_id, p)
+
+    def _send(self, entity_id: str, p: dict):
+        fade = self.FINAL_FADE if p["final"] else self.DRAG_FADE
+        brightness = p.get("brightness")
+        if brightness is not None and round(brightness * 100) <= 0:
+            self._ha.call_service("light", "turn_off", {"entity_id": entity_id, "transition": fade})
+            return
+        data: dict = {"entity_id": entity_id, "transition": fade}
+        if brightness is not None:
+            data["brightness_pct"] = round(brightness * 100)
+        if "hs" in p:
+            hue, sat = p["hs"]
+            data["hs_color"] = [round(hue % 360, 1), round(sat * 100, 1)]
+        self._ha.call_service("light", "turn_on", data)
