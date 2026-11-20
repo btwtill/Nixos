@@ -135,7 +135,8 @@ class LightSender:
         everything in order, and only the latest value per light.
 
     Lights whose integration can't fade (no TRANSITION feature in Home
-    Assistant, e.g. some Govee/Tuya bulbs) still step; that is the bulb.
+    Assistant, e.g. many Govee/Tuya bulbs) would show each step of a drag as a
+    jump. They only get the value the finger let go at (and scenes), in one go.
     """
 
     DRAG_FADE = 0.4     # s: fade per step while dragging (a bit over `interval`, so they overlap)
@@ -147,7 +148,22 @@ class LightSender:
         self._wake = threading.Condition()
         self._pending: dict[str, dict] = {}     # entity → {"brightness": 0-1, "hs": (h, s), "final": bool}
         self._last: dict[str, float] = {}       # entity → when it was last sent
+        self._fades: dict[str, bool] = {}       # entity → can it fade (asked once)
         threading.Thread(target=self._run, daemon=True).start()
+
+    TRANSITION = 32     # Home Assistant LightEntityFeature.TRANSITION
+
+    def can_fade(self, entity_id: str) -> bool:
+        """Whether the light's integration supports `transition` (asked once, on the sender thread)."""
+        if entity_id not in self._fades:
+            state = self._ha.get_state(entity_id)
+            if state is None:
+                return True                     # unknown for now (HA unreachable): ask again next time
+            features = state.get("attributes", {}).get("supported_features", 0) or 0
+            self._fades[entity_id] = bool(int(features) & self.TRANSITION)
+            print(f"[lights] {entity_id}: {'fades' if self._fades[entity_id] else 'cannot fade, sends the final value only'}",
+                  flush=True)
+        return self._fades[entity_id]
 
     def update(self, entity_id: str, brightness: float | None = None,
                hs: tuple[float, float] | None = None, final: bool = False):
@@ -170,7 +186,8 @@ class LightSender:
                     # a light is due once its interval since the last send has passed;
                     # a final value doesn't wait (the drag is over)
                     due = [e for e, p in self._pending.items()
-                           if p["final"] or now - self._last.get(e, 0) >= self._interval]
+                           if p["final"] or (now - self._last.get(e, 0) >= self._interval
+                                             and self._fades.get(e, True))]
                     if due:
                         break
                     if self._pending:
@@ -180,16 +197,29 @@ class LightSender:
                         self._wake.wait()
                 batch = {e: self._pending.pop(e) for e in due}
             for entity_id, p in batch.items():
+                if not p["final"] and not self.can_fade(entity_id):
+                    with self._wake:                # found out just now: hold it for the final value
+                        held = self._pending.setdefault(entity_id, {"final": False})
+                        for key, value in p.items():
+                            held.setdefault(key, value)
+                    continue
                 self._last[entity_id] = time.monotonic()
                 self._send(entity_id, p)
 
     def _send(self, entity_id: str, p: dict):
         fade = self.FINAL_FADE if p["final"] else self.DRAG_FADE
+        if not self._fades.get(entity_id, True):
+            fade = None                             # the integration would ignore it anyway
         brightness = p.get("brightness")
         if brightness is not None and round(brightness * 100) <= 0:
-            self._ha.call_service("light", "turn_off", {"entity_id": entity_id, "transition": fade})
+            data = {"entity_id": entity_id}
+            if fade is not None:
+                data["transition"] = fade
+            self._ha.call_service("light", "turn_off", data)
             return
-        data: dict = {"entity_id": entity_id, "transition": fade}
+        data: dict = {"entity_id": entity_id}
+        if fade is not None:
+            data["transition"] = fade
         if brightness is not None:
             data["brightness_pct"] = round(brightness * 100)
         if "hs" in p:
