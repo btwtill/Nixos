@@ -169,7 +169,7 @@ class SvgButton(base._Widget):
 # ----------------------
 startup_layout = [
     ("1", "home-app"),    # group 1 — home control UI (with the HMI: its Home page, no window)
-    ("2", "lights-app"),  # group 2 — lights control UI
+    ("2", "lights-app"),  # group 2 — lights control UI (with the HMI: its Lights app, no window)
     ("3", terminal),      # group 3
     ("4", "music-app"),   # group 4 — music player
     ("5", terminal),      # group 5 - terminal
@@ -195,7 +195,8 @@ _NAMED_GROUPS = {
 _startup_queue = deque(["3", "5"])
 
 if _hostname in HMI_HOSTS:
-    startup_layout = [(group, cmd) for group, cmd in startup_layout if cmd != "home-app"]
+    # these apps are drawn by the HMI itself (homy-neo-hmi: HomeApp, LightsApp)
+    startup_layout = [(group, cmd) for group, cmd in startup_layout if cmd not in ("home-app", "lights-app")]
 
 # ----------------------
 # Launcher apps — every app started from the app menu gets its own group
@@ -328,7 +329,8 @@ def rescue_launcher_apps():
 # window. The bars of the screen are Gaps: they keep the HMI's bars free and
 # draw nothing, the apps are tiled over the HMI's app area.
 # Group changes are reported to the shell to highlight the matching button.
-# Group 1 has no window: there the HMI's own Home page shows in the app area.
+# Groups 1 and 2 have no window: there the HMI's own Home and Lights apps show
+# in the app area.
 # ----------------------
 HMI_TITLE = "Homy HMI"
 HMI_URL   = "http://127.0.0.1:47811/group?name="

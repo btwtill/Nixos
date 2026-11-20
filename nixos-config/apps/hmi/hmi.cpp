@@ -314,7 +314,12 @@ int main(int argc, char** argv)
     std::function<Mat2D()> view;
     bool dirty = true;
     bool exposed = false;
+    double lastInput = -1e9;   // glfwGetTime() of the last pointer event
+    bool logInput = false;     // HOMY_HMI_STATS: pointer events on stderr
+    bool pressed = false;
+    int moves = 0;             // moves since the last press/release (logged as a count)
   } ctx{machine.get(), viewTransform};
+  ctx.logInput = opt.stats;
   glfwSetWindowUserPointer(window, &ctx);
   // exposed again (mapped, uncovered): an X11 image isn't kept by the server
   glfwSetWindowRefreshCallback(window, [](GLFWwindow* w) {
@@ -328,6 +333,10 @@ int main(int argc, char** argv)
     c->machine->pointerMove(c->view().invertOrIdentity() *
                             Vec2D(static_cast<float>(x), static_cast<float>(y)));
     c->dirty = true;
+    c->lastInput = glfwGetTime();
+    if (c->logInput && c->pressed && ++c->moves % 10 == 1)
+      homy::step("input: move " + std::to_string(int(x)) + "," + std::to_string(int(y)) + " (" +
+                 std::to_string(c->moves) + " moves so far)");
   });
   glfwSetMouseButtonCallback(window, [](GLFWwindow* w, int button, int action, int) {
     if (button != GLFW_MOUSE_BUTTON_LEFT)
@@ -341,6 +350,15 @@ int main(int argc, char** argv)
     else
       c->machine->pointerUp(p);
     c->dirty = true;
+    c->lastInput = glfwGetTime();
+    if (c->logInput)
+    {
+      homy::step(std::string("input: ") + (action == GLFW_PRESS ? "press" : "release") + " at " +
+                 std::to_string(int(x)) + "," + std::to_string(int(y)) + " after " + std::to_string(c->moves) +
+                 " moves");
+      c->pressed = action == GLFW_PRESS;
+      c->moves = 0;
+    }
   });
 
   // ── commands from the controller ──────────────────────────────────────────
@@ -415,6 +433,8 @@ int main(int argc, char** argv)
   double lastAdvance = glfwGetTime();   // … the state machine was last advanced at
   bool animating = true;
   bool modeReported = false;
+  constexpr double kSettleSeconds = 3.0;   // longest a release may keep things moving (a long fling)
+  int stillFrames = 0;                     // frames in a row that came out identical to the one before
   struct
   {
     int frames = 0;
@@ -510,6 +530,18 @@ int main(int argc, char** argv)
     renderer.restore();
     const double t2 = homy::nowMs();
     backend->finishFrame();
+    // Keep drawing after a touch while the picture still moves: a scroll view
+    // settling after release (a page snapping into place, a fling) is not
+    // always reported by advanceAndApply, above all inside nested artboards.
+    // With a copy present each frame's change is measured, so drawing stops
+    // with the first frame that comes out identical; without one (GL swap),
+    // for a fixed time after the last touch.
+    {
+      const homy::FrameTimes& f = backend->frameTimes();
+      stillFrames = f.measured && f.changed <= 0 ? stillFrames + 1 : 0;
+      if (glfwGetTime() - ctx.lastInput < kSettleSeconds && stillFrames < 2)
+        animating = true;
+    }
 
     if (opt.stats)
     {

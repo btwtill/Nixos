@@ -49,9 +49,12 @@ NAV = {
 }
 MENU = ("topbar", 1)              # also highlighted while a launcher app (app:<id>) is shown
 
-# Apps inside the Rive file: Qtile group → HMIInterface/app (which one the app
-# area shows). Any other group: none (1 = no app; windows cover the area).
-RIVE_APPS = {"1": 0}              # Home
+# Apps inside the Rive file: Qtile group → HMIInterface/app, which app the app
+# area shows (the slots in homy-neo-hmi's AppArea). Any other group: -1, no
+# Rive app; that group's windows are tiled over the app area.
+RIVE_APPS = {"1": 0,              # Home
+             "2": 1}              # Lights
+NO_RIVE_APP = -1
 
 
 def log(msg: str):
@@ -111,7 +114,7 @@ class Hmi:
         for bar in NAV:
             self.index[bar] = active_index(bar, group)
             self.send(f"number {bar}/activeIndex {self.index[bar]}")
-        self.send(f"number app {RIVE_APPS.get(group, 1)}")
+        self.send(f"number app {RIVE_APPS.get(group, NO_RIVE_APP)}")
         if RIVE_APPS.get(group) == 0:
             self.home.recenter()              # back on Home: the forecast starts at the current hour again
 
