@@ -137,19 +137,29 @@ class LightSender:
     Lights whose integration can't fade (no TRANSITION feature in Home
     Assistant, e.g. many Govee/Tuya bulbs) would show each step of a drag as a
     jump. They only get the value the finger let go at (and scenes), in one go.
+    The same goes for the lights listed as `final_only` (see __init__).
+
+    Slow lights (a cloud integration, a busy radio) can't finish a 0.4 s fade
+    before the next step arrives: every step restarts the fade and the light
+    falls behind. So each light is paced by how long Home Assistant takes to
+    confirm its commands: steps no closer than ~3x that, each fading as long.
     """
 
-    DRAG_FADE = 0.4     # s: fade per step while dragging (a bit over `interval`, so they overlap)
     FINAL_FADE = 0.8    # s: fade for a finished change (drag released, scene applied)
 
-    def __init__(self, ha: HAClient, interval: float = 0.3):
+    def __init__(self, ha: HAClient, interval: float = 0.3, final_only=(), log=None):
+        """final_only: lights that get no steps during a drag at all (they fade
+        but can't follow: e.g. a bulb that queues commands internally)."""
         import threading
         self._ha, self._interval = ha, interval
+        self._final_only = set(final_only)
+        self._log = log or (lambda msg: print(f"[lights] {msg}", flush=True))
+        self._latency: dict[str, float] = {}    # entity → seconds HA takes to confirm a command (smoothed)
         self._wake = threading.Condition()
         self._pending: dict[str, dict] = {}     # entity → {"brightness": 0-1, "hs": (h, s), "final": bool}
         self._last: dict[str, float] = {}       # entity → when it was last sent
         self._fades: dict[str, bool] = {}       # entity → can it fade (asked once)
-        threading.Thread(target=self._run, daemon=True).start()
+        self._threads: set[str] = set()         # lights with a sender thread
 
     TRANSITION = 32     # Home Assistant LightEntityFeature.TRANSITION
 
@@ -161,9 +171,16 @@ class LightSender:
                 return True                     # unknown for now (HA unreachable): ask again next time
             features = state.get("attributes", {}).get("supported_features", 0) or 0
             self._fades[entity_id] = bool(int(features) & self.TRANSITION)
-            print(f"[lights] {entity_id}: {'fades' if self._fades[entity_id] else 'cannot fade, sends the final value only'}",
-                  flush=True)
+            self._log(f"{entity_id}: {'fades' if self._fades[entity_id] else 'cannot fade, sends the final value only'}")
         return self._fades[entity_id]
+
+    def _live(self, entity_id: str) -> bool:
+        """Whether the light gets steps while a drag is still going on."""
+        return entity_id not in self._final_only and self._fades.get(entity_id, True)
+
+    def step_interval(self, entity_id: str) -> float:
+        """Seconds between two steps of a drag for this light (also: how long each fades)."""
+        return max(self._interval, 3 * self._latency.get(entity_id, 0))
 
     def update(self, entity_id: str, brightness: float | None = None,
                hs: tuple[float, float] | None = None, final: bool = False):
@@ -175,39 +192,45 @@ class LightSender:
             if hs is not None:
                 p["hs"] = hs
             p["final"] = p["final"] or final
-            self._wake.notify()
+            if entity_id not in self._threads:
+                import threading
+                self._threads.add(entity_id)
+                threading.Thread(target=self._run_light, args=(entity_id,), daemon=True).start()
+            self._wake.notify_all()
 
-    def _run(self):
+    def _run_light(self, entity_id: str):
+        """One thread per light: its commands go out in order, and a slow light
+        never holds up a fast one."""
         import time
         while True:
             with self._wake:
                 while True:
+                    p = self._pending.get(entity_id)
                     now = time.monotonic()
-                    # a light is due once its interval since the last send has passed;
-                    # a final value doesn't wait (the drag is over)
-                    due = [e for e, p in self._pending.items()
-                           if p["final"] or (now - self._last.get(e, 0) >= self._interval
-                                             and self._fades.get(e, True))]
-                    if due:
+                    wait = self.step_interval(entity_id) - (now - self._last.get(entity_id, 0))
+                    # due: a final value (the drag is over) right away; a step once
+                    # the light's interval has passed, and only for lights that get steps
+                    if p and (p["final"] or (wait <= 0 and self._live(entity_id))):
                         break
-                    if self._pending:
-                        wait = min(self._interval - (now - self._last.get(e, 0)) for e in self._pending)
-                        self._wake.wait(max(wait, 0.01))
-                    else:
-                        self._wake.wait()
-                batch = {e: self._pending.pop(e) for e in due}
-            for entity_id, p in batch.items():
-                if not p["final"] and not self.can_fade(entity_id):
-                    with self._wake:                # found out just now: hold it for the final value
-                        held = self._pending.setdefault(entity_id, {"final": False})
-                        for key, value in p.items():
-                            held.setdefault(key, value)
-                    continue
-                self._last[entity_id] = time.monotonic()
-                self._send(entity_id, p)
+                    self._wake.wait(max(wait, 0.01) if p and self._live(entity_id) else None)
+                p = self._pending.pop(entity_id)
+            if not p["final"] and (not self.can_fade(entity_id) or entity_id in self._final_only):
+                with self._wake:                    # found out just now: hold it for the final value
+                    held = self._pending.setdefault(entity_id, {"final": False})
+                    for key, value in p.items():
+                        held.setdefault(key, value)
+                continue
+            started = self._last[entity_id] = time.monotonic()
+            self._send(entity_id, p)
+            took = time.monotonic() - started
+            before = self._latency.get(entity_id)
+            self._latency[entity_id] = took if before is None else 0.7 * before + 0.3 * took
+            if before is None or abs(self.step_interval(entity_id) - max(self._interval, 3 * before)) > 0.2:
+                self._log(f"{entity_id}: confirms in {took * 1000:.0f} ms, drag steps every {self.step_interval(entity_id):.1f} s")
 
     def _send(self, entity_id: str, p: dict):
-        fade = self.FINAL_FADE if p["final"] else self.DRAG_FADE
+        # a step fades for as long as the light has until the next one (a bit longer, so they overlap)
+        fade = round(max(self.FINAL_FADE, self.step_interval(entity_id)) if p["final"] else 1.3 * self.step_interval(entity_id), 2)
         if not self._fades.get(entity_id, True):
             fade = None                             # the integration would ignore it anyway
         brightness = p.get("brightness")

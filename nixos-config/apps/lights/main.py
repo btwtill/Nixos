@@ -290,7 +290,7 @@ class LightsWidget(QWidget):
 
         # HA client; changes go out through one sender that fades them (ha_client.LightSender)
         self._ha = _hac.HAClient(_cfg.HA_URL, _cfg.HA_TOKEN)
-        self._sender = _hac.LightSender(self._ha)
+        self._sender = _hac.LightSender(self._ha, final_only=_cfg.LIGHTS_FINAL_ONLY, log=self._log_sender)
         self._ha_lights_loaded.connect(self._apply_ha_lights)
         self._ha_state_fetched.connect(self._apply_ha_state)
 
@@ -352,6 +352,14 @@ class LightsWidget(QWidget):
 
     def _poll_ha_lights(self):
         threading.Thread(target=self._fetch_ha_lights, daemon=True).start()
+
+    def _log_sender(self, msg: str):
+        """How each light is driven (LightSender) → ~/.local/share/lights-app/debug.log"""
+        import os, datetime
+        log_dir = os.path.expanduser("~/.local/share/lights-app")
+        os.makedirs(log_dir, exist_ok=True)
+        with open(os.path.join(log_dir, "debug.log"), "a") as f:
+            f.write(f"{datetime.datetime.now().isoformat()} sender: {msg}\n")
 
     def _fetch_ha_lights(self):
         import os, datetime
