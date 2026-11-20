@@ -112,6 +112,8 @@ class Hmi:
             self.index[bar] = active_index(bar, group)
             self.send(f"number {bar}/activeIndex {self.index[bar]}")
         self.send(f"number app {RIVE_APPS.get(group, 1)}")
+        if RIVE_APPS.get(group) == 0:
+            self.home.recenter()              # back on Home: the forecast starts at the current hour again
 
     def set_theme(self, tokens: dict[str, str]):
         self.theme = tokens
