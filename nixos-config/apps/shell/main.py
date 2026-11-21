@@ -3,7 +3,7 @@
 The drawing is done by homy-hmi (apps/hmi, Rive's native renderer); this
 process only drives it over its stdin/stdout. One homy-hmi plays homy-neo-hmi,
 the whole screen in one file: top bar, sidebar, bottom bar, and the app area.
-The app area shows the file's own apps (Home, see home.py, and Lights: `app` picks
+The app area shows the file's own apps (Home, see home.py, and Lights, lights.py: `app` picks
 which, by index); every other app is a window Qtile tiles over that area (it
 keeps the HMI window below them).
 
@@ -30,6 +30,7 @@ import urllib.request
 from pathlib import Path
 
 from home import Home
+from lights import Lights
 
 UI = Path(os.environ.get("HOMY_UI_DIR", "/run/current-system/sw/share/homy/ui"))
 HMI = os.environ.get("HOMY_HMI", "homy-hmi")
@@ -99,9 +100,11 @@ class Hmi:
         self.index = {bar: active_index(bar, self.group) for bar in NAV}
         self.theme: dict[str, str] = {}
         self.home = Home(self.send, log)
+        self.lights = Lights(self.send, log)
 
     def start(self):
         self.home.start()
+        self.lights.start()
         threading.Thread(target=self._run, daemon=True).start()
         threading.Thread(target=self._clock, daemon=True).start()
 
@@ -166,6 +169,7 @@ class Hmi:
             self.set_theme(self.theme)
             self.send(f"string bottombar/time {time.strftime('%H:%M')}")
             self.home.ready()
+            self.lights.ready()
             if FLOORPLAN.is_file():
                 self.send(f"image lights/floorplan/image {FLOORPLAN}")
             return
@@ -177,6 +181,8 @@ class Hmi:
                 self.index[bar] = index
                 threading.Thread(target=navigate, args=(bar, index), daemon=True).start()
         elif kind == "number" and self.home.on_number(path, float(value)):
+            pass
+        elif kind == "number" and self.lights.on_number(path, float(value)):
             pass
         else:
             log(line)

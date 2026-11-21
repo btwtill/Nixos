@@ -37,6 +37,16 @@ class HAClient:
         except (urllib.error.URLError, OSError):
             return False
 
+    def get_states(self) -> list[dict] | None:
+        """Every entity's state in one request (None when HA can't be reached)."""
+        req = urllib.request.Request(f"{self._base}/api/states", headers=self._headers)
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                states = json.loads(resp.read())
+        except (urllib.error.URLError, OSError, json.JSONDecodeError):
+            return None
+        return states if isinstance(states, list) else None
+
     def get_all_lights(self) -> tuple[list[dict], str]:
         """Fetch all light.* entities, sorted by friendly name.
 
@@ -183,14 +193,21 @@ class LightSender:
         return max(self._interval, 3 * self._latency.get(entity_id, 0))
 
     def update(self, entity_id: str, brightness: float | None = None,
-               hs: tuple[float, float] | None = None, final: bool = False):
-        """Queue a change; values not given stay as they are on the light."""
+               hs: tuple[float, float] | None = None, final: bool = False,
+               kelvin: float | None = None):
+        """Queue a change; values not given stay as they are on the light.
+        hs (hue 0-360, saturation 0-1) and kelvin (colour temperature) replace
+        each other: the light is either coloured or white."""
         with self._wake:
             p = self._pending.setdefault(entity_id, {"final": False})
             if brightness is not None:
                 p["brightness"] = brightness
             if hs is not None:
                 p["hs"] = hs
+                p.pop("kelvin", None)
+            if kelvin is not None:
+                p["kelvin"] = kelvin
+                p.pop("hs", None)
             p["final"] = p["final"] or final
             if entity_id not in self._threads:
                 import threading
@@ -248,4 +265,6 @@ class LightSender:
         if "hs" in p:
             hue, sat = p["hs"]
             data["hs_color"] = [round(hue % 360, 1), round(sat * 100, 1)]
+        if "kelvin" in p:
+            data["color_temp_kelvin"] = round(p["kelvin"])
         self._ha.call_service("light", "turn_on", data)

@@ -7,7 +7,7 @@
 //            [--background #RRGGBB] [--backend gl|vulkan] [--present gl|copy] [--msaa N]
 //
 // stdin                                   stdout
-//   number <path> <value>                   ready <artboard> <GPU>
+//   number <path> <value>  (or 0/1: boolean) ready <artboard> <GPU>
 //   string <path> <text…>                   number <path> <value>   (a watched
 //   color <ViewModel>/<name> <#RRGGBB[AA]>    number changed inside the file,
 //   watch <path>                              e.g. a tap wrote activeIndex)
@@ -51,6 +51,7 @@
 #include "rive/renderer/render_context.hpp"
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
+#include "rive/viewmodel/viewmodel_instance_boolean.hpp"
 #include "rive/viewmodel/viewmodel_instance_color.hpp"
 #include "rive/viewmodel/viewmodel_instance_number.hpp"
 #include "rive/viewmodel/viewmodel_instance_string.hpp"
@@ -379,6 +380,9 @@ int main(int argc, char** argv)
     // reads as an enormous speed: a short swipe flung pages two pages on.
     bool movePending = false;
     Vec2D move;
+    // after a press or release: report watched values right away, so a tap
+    // that sets and clears a value within one frame is still seen
+    std::function<void()> afterPointer;
     void flushMove()
     {
       if (movePending)
@@ -411,10 +415,18 @@ int main(int argc, char** argv)
     // Press and release carry their own position.
     c->movePending = false;
     if (action == GLFW_PRESS)
+    {
       c->machine->pointerDown(p);
+      // apply the binds once, without moving time: what the press moved (a
+      // drag point a listener reads, e.g. the ring slider's) is up to date
+      // before the first move, which may come before the next frame
+      c->machine->advanceAndApply(0);
+    }
     else
       c->machine->pointerUp(p);
     c->dirty = true;
+    if (c->afterPointer)
+      c->afterPointer();
   });
 
   // ── commands from the controller ──────────────────────────────────────────
@@ -431,7 +443,10 @@ int main(int argc, char** argv)
     {
       float value = 0;
       words >> value;
-      if (auto* p = numberProp(name))
+      auto* v = propertyAt(vmi, name);
+      if (v && v->is<ViewModelInstanceBoolean>())   // a boolean: 0 is false, anything else true
+        v->as<ViewModelInstanceBoolean>()->propertyValue(value != 0);
+      else if (auto* p = numberProp(name))
       {
         p->propertyValue(value);
         if (watched.count(name))
@@ -492,6 +507,21 @@ int main(int argc, char** argv)
     ctx.dirty = true;
   };
 
+  auto reportWatched = [&]() {
+    for (auto& [name, lastValue] : watched)
+    {
+      auto* p = numberProp(name);
+      if (p && p->propertyValue() != lastValue)
+      {
+        lastValue = p->propertyValue();
+        std::ostringstream msg;
+        msg << "number " << name << " " << lastValue;
+        out(msg.str());
+      }
+    }
+  };
+  ctx.afterPointer = reportWatched;
+
   std::thread(readStdin).detach();
   out("ready " + std::string(artboard->name()) + " " + backend->deviceName());
 
@@ -544,17 +574,7 @@ int main(int argc, char** argv)
     animating = machine->advanceAndApply(std::min(elapsed, 0.1f)) || opt.bench;
     ctx.dirty = false;
 
-    for (auto& [name, lastValue] : watched)
-    {
-      auto* p = numberProp(name);
-      if (p && p->propertyValue() != lastValue)
-      {
-        lastValue = p->propertyValue();
-        std::ostringstream msg;
-        msg << "number " << name << " " << lastValue;
-        out(msg.str());
-      }
-    }
+    reportWatched();
 
     const double t1 = homy::nowMs();
     if (ctx.exposed)
