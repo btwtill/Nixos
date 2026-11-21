@@ -108,7 +108,7 @@ public:
     if (!m_opt.copyPresent)
     {
       glfwSwapBuffers(m_window);
-      m_times.gpu = 0, m_times.present = nowMs() - t1, m_times.changed = 1, m_times.measured = false;
+      m_times.gpu = 0, m_times.present = nowMs() - t1, m_times.changed = 1;
       return true;
     }
     GLuint readFbo = m_fbo;
@@ -127,7 +127,6 @@ public:
     const double t2 = nowMs();
     m_times.gpu = t2 - t1;
     m_times.changed = m_copy->present({m_pixels.data(), m_width * 4, /*bgra*/ false, /*bottomUp*/ true});
-    m_times.measured = true;
     m_times.present = nowMs() - t2;
     return true;
   }

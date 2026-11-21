@@ -28,7 +28,6 @@ struct FrameTimes
   double gpu = 0;       // waiting for the GPU to finish + reading the frame back
   double present = 0;   // onto the window
   double changed = 1;   // share of the window that changed (copy present; else 1)
-  bool measured = false;  // `changed` was measured (copy present), not assumed
 };
 
 class Backend

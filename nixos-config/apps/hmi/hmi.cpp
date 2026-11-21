@@ -12,6 +12,7 @@
 //   color <ViewModel>/<name> <#RRGGBB[AA]>    number changed inside the file,
 //   watch <path>                              e.g. a tap wrote activeIndex)
 //   background <#RRGGBB>                    error <message>
+//   image <path> <file.png|jpg>             (an image property: the picture it shows)
 //
 // <path> is a property of the artboard's view model; a slash descends into a
 // nested view model (sidebar/activeIndex). color addresses a global view model
@@ -54,6 +55,18 @@
 #include "rive/viewmodel/viewmodel_instance_number.hpp"
 #include "rive/viewmodel/viewmodel_instance_string.hpp"
 #include "rive/viewmodel/viewmodel_instance_viewmodel.hpp"
+#include "rive/viewmodel/viewmodel_instance_asset_image.hpp"
+#include "rive/assets/image_asset.hpp"
+#include "rive/file_asset_loader.hpp"
+#include "rive/gpu_texture_format.hpp"
+#include "rive/renderer/render_context_impl.hpp"
+#include "rive/renderer/rive_render_image.hpp"
+
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
+#define STBI_NO_STDIO
+#include <stb_image.h>
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -195,6 +208,51 @@ ViewModelInstanceValue* propertyAt(rcp<ViewModelInstance> vmi, const std::string
   }
   return vmi ? vmi->propertyValue(path.substr(start)) : nullptr;
 }
+
+// Images. The Rive runtime here is built without its image decoders (they'd
+// pull libpng, libjpeg and libwebp into the Nix build), so PNG and JPEG are
+// decoded with stb_image and handed to the renderer as a texture. Used for the
+// images inside the .riv and for `image` commands (e.g. the floorplan).
+rcp<RenderImage> decodeImage(gpu::RenderContext* context, Span<const uint8_t> bytes)
+{
+  int w = 0, h = 0, channels = 0;
+  stbi_uc* rgba = stbi_load_from_memory(bytes.data(), static_cast<int>(bytes.size()), &w, &h, &channels, 4);
+  if (!rgba)
+    return nullptr;
+  for (size_t i = 0, n = size_t(w) * h * 4; i < n; i += 4)   // the renderer wants premultiplied alpha
+  {
+    const unsigned a = rgba[i + 3];
+    rgba[i] = static_cast<stbi_uc>(rgba[i] * a / 255);
+    rgba[i + 1] = static_cast<stbi_uc>(rgba[i + 1] * a / 255);
+    rgba[i + 2] = static_cast<stbi_uc>(rgba[i + 2] * a / 255);
+  }
+  uint32_t mipLevels = 1;
+  for (uint32_t s = static_cast<uint32_t>(std::max(w, h)); s > 1; s >>= 1)
+    ++mipLevels;
+  rcp<gpu::Texture> texture = context->impl()->makeImageTexture(
+      w, h, mipLevels, GPUTextureFormat::rgba32, rgba, 1, 1, /*srgb*/ false, /*generateRemainingMips*/ true);
+  stbi_image_free(rgba);
+  return texture ? make_rcp<RiveRenderImage>(std::move(texture)) : nullptr;
+}
+
+class ImageLoader : public FileAssetLoader
+{
+public:
+  explicit ImageLoader(gpu::RenderContext* context) : m_context(context) {}
+  bool loadContents(FileAsset& asset, Span<const uint8_t> bytes, Factory*) override
+  {
+    if (!asset.is<ImageAsset>() || bytes.size() == 0)
+      return false;   // everything else: Rive's own handling
+    if (rcp<RenderImage> image = decodeImage(m_context, bytes))
+      asset.as<ImageAsset>()->renderImage(image);
+    else
+      homy::step("cannot decode image " + asset.name());
+    return true;
+  }
+
+private:
+  gpu::RenderContext* m_context;
+};
 } // namespace
 
 int main(int argc, char** argv)
@@ -241,7 +299,8 @@ int main(int argc, char** argv)
 
   // ── the .riv: artboard, state machine, view model + global view models ────
   ImportResult result;
-  rcp<File> file = File::import(Span<const uint8_t>(bytes.data(), bytes.size()), renderContext, &result);
+  rcp<File> file = File::import(Span<const uint8_t>(bytes.data(), bytes.size()), renderContext, &result,
+                                make_rcp<ImageLoader>(renderContext));
   if (!file)
   {
     out("error cannot import " + opt.riv);
@@ -314,12 +373,19 @@ int main(int argc, char** argv)
     std::function<Mat2D()> view;
     bool dirty = true;
     bool exposed = false;
-    double lastInput = -1e9;   // glfwGetTime() of the last pointer event
-    bool logInput = false;     // HOMY_HMI_STATS: pointer events on stderr
-    bool pressed = false;
-    int moves = 0;             // moves since the last press/release (logged as a count)
+    // Pointer moves are passed on once per frame, the latest position only.
+    // Rive derives a scroll's fling from the time between moves; X11 delivers
+    // a touchscreen's moves in bursts (several within microseconds), which it
+    // reads as an enormous speed: a short swipe flung pages two pages on.
+    bool movePending = false;
+    Vec2D move;
+    void flushMove()
+    {
+      if (movePending)
+        machine->pointerMove(move);
+      movePending = false;
+    }
   } ctx{machine.get(), viewTransform};
-  ctx.logInput = opt.stats;
   glfwSetWindowUserPointer(window, &ctx);
   // exposed again (mapped, uncovered): an X11 image isn't kept by the server
   glfwSetWindowRefreshCallback(window, [](GLFWwindow* w) {
@@ -330,13 +396,8 @@ int main(int argc, char** argv)
     auto* c = static_cast<Ctx*>(glfwGetWindowUserPointer(w));
     double x, y;
     glfwGetCursorPos(w, &x, &y);
-    c->machine->pointerMove(c->view().invertOrIdentity() *
-                            Vec2D(static_cast<float>(x), static_cast<float>(y)));
-    c->dirty = true;
-    c->lastInput = glfwGetTime();
-    if (c->logInput && c->pressed && ++c->moves % 10 == 1)
-      homy::step("input: move " + std::to_string(int(x)) + "," + std::to_string(int(y)) + " (" +
-                 std::to_string(c->moves) + " moves so far)");
+    c->move = c->view().invertOrIdentity() * Vec2D(static_cast<float>(x), static_cast<float>(y));
+    c->movePending = c->dirty = true;
   });
   glfwSetMouseButtonCallback(window, [](GLFWwindow* w, int button, int action, int) {
     if (button != GLFW_MOUSE_BUTTON_LEFT)
@@ -345,20 +406,15 @@ int main(int argc, char** argv)
     double x, y;
     glfwGetCursorPos(w, &x, &y);
     Vec2D p = c->view().invertOrIdentity() * Vec2D(static_cast<float>(x), static_cast<float>(y));
+    // A move still waiting is dropped, not sent: right before the release it
+    // could follow the last frame's move by microseconds (the burst again).
+    // Press and release carry their own position.
+    c->movePending = false;
     if (action == GLFW_PRESS)
       c->machine->pointerDown(p);
     else
       c->machine->pointerUp(p);
     c->dirty = true;
-    c->lastInput = glfwGetTime();
-    if (c->logInput)
-    {
-      homy::step(std::string("input: ") + (action == GLFW_PRESS ? "press" : "release") + " at " +
-                 std::to_string(int(x)) + "," + std::to_string(int(y)) + " after " + std::to_string(c->moves) +
-                 " moves");
-      c->pressed = action == GLFW_PRESS;
-      c->moves = 0;
-    }
   });
 
   // ── commands from the controller ──────────────────────────────────────────
@@ -408,6 +464,20 @@ int main(int argc, char** argv)
         v->as<ViewModelInstanceColor>()->propertyValue(static_cast<int>(argb));
       // tokens the file doesn't have are skipped silently, like the web shell did
     }
+    else if (cmd == "image")
+    {
+      std::string path;
+      std::getline(words >> std::ws, path);
+      auto* v = propertyAt(vmi, name);
+      if (!v || !v->is<ViewModelInstanceAssetImage>())
+        return out("error no image property '" + name + "'");
+      std::ifstream f(path, std::ios::binary);
+      std::vector<uint8_t> data((std::istreambuf_iterator<char>(f)), {});
+      rcp<RenderImage> image = data.empty() ? nullptr : decodeImage(renderContext, Span<const uint8_t>(data.data(), data.size()));
+      if (!image)
+        return out("error cannot load image " + path);
+      v->as<ViewModelInstanceAssetImage>()->value(image.get());   // takes its own reference
+    }
     else if (cmd == "watch")
     {
       if (auto* p = numberProp(name))
@@ -433,8 +503,6 @@ int main(int argc, char** argv)
   double lastAdvance = glfwGetTime();   // … the state machine was last advanced at
   bool animating = true;
   bool modeReported = false;
-  constexpr double kSettleSeconds = 3.0;   // longest a release may keep things moving (a long fling)
-  int stillFrames = 0;                     // frames in a row that came out identical to the one before
   struct
   {
     int frames = 0;
@@ -472,6 +540,7 @@ int main(int argc, char** argv)
     lastAdvance = frameStart;
 
     const double t0 = homy::nowMs();
+    ctx.flushMove();
     animating = machine->advanceAndApply(std::min(elapsed, 0.1f)) || opt.bench;
     ctx.dirty = false;
 
@@ -530,18 +599,6 @@ int main(int argc, char** argv)
     renderer.restore();
     const double t2 = homy::nowMs();
     backend->finishFrame();
-    // Keep drawing after a touch while the picture still moves: a scroll view
-    // settling after release (a page snapping into place, a fling) is not
-    // always reported by advanceAndApply, above all inside nested artboards.
-    // With a copy present each frame's change is measured, so drawing stops
-    // with the first frame that comes out identical; without one (GL swap),
-    // for a fixed time after the last touch.
-    {
-      const homy::FrameTimes& f = backend->frameTimes();
-      stillFrames = f.measured && f.changed <= 0 ? stillFrames + 1 : 0;
-      if (glfwGetTime() - ctx.lastInput < kSettleSeconds && stillFrames < 2)
-        animating = true;
-    }
 
     if (opt.stats)
     {

@@ -108,7 +108,6 @@ public:
     if (m_sync->waitForPixelRead(&read) != VK_SUCCESS)
       return fail("reading the frame back");
     const double t2 = nowMs();
-    m_times.measured = true;
     m_times.changed = m_copy.present({read.data, static_cast<int>(read.strideBytes),
                                       /*bgra*/ read.format == VK_FORMAT_B8G8R8A8_UNORM, /*bottomUp*/ false});
     m_sync->finishPixelRead();

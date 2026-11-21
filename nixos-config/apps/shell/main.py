@@ -3,7 +3,7 @@
 The drawing is done by homy-hmi (apps/hmi, Rive's native renderer); this
 process only drives it over its stdin/stdout. One homy-hmi plays homy-neo-hmi,
 the whole screen in one file: top bar, sidebar, bottom bar, and the app area.
-The app area shows the file's own apps (so far Home, see home.py: `app` picks
+The app area shows the file's own apps (Home, see home.py, and Lights: `app` picks
 which, by index); every other app is a window Qtile tiles over that area (it
 keeps the HMI window below them).
 
@@ -11,6 +11,7 @@ keeps the HMI window below them).
   here → homy-hmi    "number sidebar/activeIndex 2"  highlight the current group
                      "string bottombar/time 12:34"   the clock
                      "color Theme/accent #…"         theme tokens (homy-theme)
+                     "image lights/floorplan/image F" the apartment's floorplan
 
 and connects it to the system: taps switch Qtile groups, Qtile reports group
 changes to 127.0.0.1:47811/group?name=… (its setgroup hook), colours follow
@@ -55,6 +56,11 @@ MENU = ("topbar", 1)              # also highlighted while a launcher app (app:<
 RIVE_APPS = {"1": 0,              # Home
              "2": 1}              # Lights
 NO_RIVE_APP = -1
+
+# The apartment's floorplan, shown by the Lights app (homy-neo-hmi's FloorPlan
+# component; it fits any size into its frame). Without this file the plan built
+# into the .riv shows. A PNG or JPEG; HOMY_FLOORPLAN overrides the path.
+FLOORPLAN = Path(os.environ.get("HOMY_FLOORPLAN", Path.home() / ".config/homy/floorplan.png"))
 
 
 def log(msg: str):
@@ -160,6 +166,8 @@ class Hmi:
             self.set_theme(self.theme)
             self.send(f"string bottombar/time {time.strftime('%H:%M')}")
             self.home.ready()
+            if FLOORPLAN.is_file():
+                self.send(f"image lights/floorplan/image {FLOORPLAN}")
             return
         path, _, value = rest.partition(" ")
         bar, _, prop = path.partition("/")

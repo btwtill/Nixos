@@ -8,9 +8,10 @@
 # (dlopen'ed by rive_vk_bootstrap by name; linked here too, so it is a real
 # dependency and Nix keeps its path in the binary; drivers from /run/opengl-driver).
 # libX11 + libXext (MIT-SHM) hand offscreen frames to the window (x11_copy.cpp).
+# stb_image decodes PNG/JPEG (images in the .riv, `image` commands).
 pkgs.clangStdenv.mkDerivation {
   pname   = "homy-hmi";
-  version = "0.3.0";
+  version = "0.4.0";
 
   src = ./.;
 
@@ -29,7 +30,7 @@ pkgs.clangStdenv.mkDerivation {
       -DRIVE_DESKTOP_GL -DWITH_RIVE_TEXT -DWITH_RIVE_LAYOUT -DYOGA_EXPORT= -DNDEBUG -DRELEASE \
       -DRIVE_VULKAN -DVK_NO_PROTOTYPES -DVMA_STATIC_VULKAN_FUNCTIONS=0 -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 \
       -DWITH_VULKAN_ATOMICS \
-      -I${rive}/include -I${rive}/share/rive_vk_bootstrap/src \
+      -I${rive}/include -I${rive}/share/rive_vk_bootstrap/src -I${pkgs.stb}/include/stb \
       hmi.cpp backend_gl.cpp backend_vulkan.cpp x11_copy.cpp \
       ${rive}/share/rive_vk_bootstrap/src/*.cpp \
       -o homy-hmi \
