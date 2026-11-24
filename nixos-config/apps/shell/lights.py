@@ -1,14 +1,24 @@
 """The Lights app (homy-neo-hmi's LightsApp): lights placed on the floorplan.
 
-So far one function: the add-light button (the bulb with the plus) puts a new
-light on the plan, at the free spot closest to the middle. The lights are kept
-in ~/.config/homy/lights.json:
+  add-light button (bulb with plus)  a new light, at the free spot closest to
+                                     the middle of the plan
+  settings button (gear)             edit mode on/off: the lights show the move
+                                     icon and can be dragged; the pages don't
+                                     scroll meanwhile
+
+The lights are kept in ~/.config/homy/lights.json:
   {"markers": [{"x": 375, "y": 176}, …]}
 x/y: the light's centre on the floorplan (750 × 353).
 
   homy-hmi → here   number lights/add 1|0|2                  the button: down, up, slid off
+                    number lights/editPress 1|0|2            the gear
+                    number lights/floorplan/markers/3/x 280  a light was dragged (edit mode)
   here → homy-hmi   list lights/floorplan/markers add PlacedLightInterface   one more light
                     number lights/floorplan/markers/3/x 245  its marker's top left
+                    number lights/edit 1                     the gear highlighted
+                    number lights/scroll 0                   the pages don't scroll
+                    number lights/floorplan/markers/3/edit 1 the light can be dragged
+                    number lights/floorplan/markers/3/marker/icon 1   the move icon
 
 The lights are a list in the file (FloorPlan's `markers`, one PlacedLight per
 item), so there is no fixed number of them.
@@ -27,6 +37,7 @@ ITEM = "PlacedLightInterface"   # the view model of one list item (artboard Plac
 SIZE = 100              # the LightMarker artboard
 PLAN_W, PLAN_H = 750, 353
 SPACING = 110           # new lights are placed at least this far apart
+SAVE_AFTER = 1.0        # s: a dragged light is saved once it rests this long
 
 
 class Lights:
@@ -34,36 +45,55 @@ class Lights:
         self.send, self.log = send, log
         self.lock = threading.Lock()
         self.markers: list[dict] = self._load()
-        self.pressed = False
+        self.pressed: set[str] = set()           # buttons with a finger down on them
+        self.edit = False
+        self.save_timer: threading.Timer | None = None
 
     def ready(self):
-        """homy-hmi (re)started: watch the button, show the lights."""
+        """homy-hmi (re)started: watch the buttons, show the lights."""
         self.send("watch lights/add")
+        self.send("watch lights/editPress")
         with self.lock:
+            self._show_edit()
             self.send(f"list {LIST} clear")
             for m in range(len(self.markers)):
-                self.send(f"list {LIST} add {ITEM}")
-                self._show(m)
+                self._add_item(m)
 
     def on_number(self, path: str, value: float) -> bool:
-        if path != "lights/add":
+        if not path.startswith("lights/"):
             return False
         with self.lock:
-            if value == 1:
-                self.pressed = True
-            elif value == 0 and self.pressed:    # a tap: down and up on the button
-                self.pressed = False
-                self._add()
+            if path == "lights/add":
+                if self._tapped(path, value):
+                    self._add()
+            elif path == "lights/editPress":
+                if self._tapped(path, value):
+                    self.edit = not self.edit
+                    self._show_edit()
+                    for m in range(len(self.markers)):
+                        self._show_edit_item(m)
+                    if not self.edit:
+                        self._save()
+            elif path.startswith(LIST + "/") and path.endswith(("/x", "/y")):
+                self._dragged(int(path.split("/")[3]), path[-1], value)
             else:
-                self.pressed = False             # slid off: no tap
+                return False
         return True
+
+    def _tapped(self, path: str, value: float) -> bool:
+        """a tap: the finger went down and came up on the button (2: slid off)"""
+        if value == 1:
+            self.pressed.add(path)
+            return False
+        was_down = path in self.pressed
+        self.pressed.discard(path)
+        return was_down and value == 0
 
     def _add(self):
         x, y = self._free_spot()
         self.markers.append({"x": x, "y": y})
         self._save()
-        self.send(f"list {LIST} add {ITEM}")
-        self._show(len(self.markers) - 1)
+        self._add_item(len(self.markers) - 1)
         self.log(f"lights: light {len(self.markers) - 1} added at {x:.0f},{y:.0f}")
 
     def _free_spot(self) -> tuple[float, float]:
@@ -77,9 +107,44 @@ class Lights:
                 return x, y
         return cx, cy                             # all taken: on top of the others
 
+    def _dragged(self, m: int, axis: str, value: float):
+        """a light was dragged in edit mode: keep it on the plan, save it once it rests"""
+        if m >= len(self.markers):
+            return
+        limit = (PLAN_W if axis == "x" else PLAN_H) - SIZE
+        top_left = max(0.0, min(limit, value))
+        if top_left != value:                     # dragged off the plan: back to the edge
+            self.send(f"number {LIST}/{m}/{axis} {top_left}")
+        self.markers[m][axis] = top_left + SIZE / 2
+        if self.save_timer:
+            self.save_timer.cancel()
+        self.save_timer = threading.Timer(SAVE_AFTER, self._save_locked)
+        self.save_timer.daemon = True
+        self.save_timer.start()
+
+    def _save_locked(self):
+        with self.lock:
+            self._save()
+
+    def _add_item(self, m: int):
+        """one more item in the file's list, for light m"""
+        self.send(f"list {LIST} add {ITEM}")
+        for axis in ("x", "y"):
+            self.send(f"watch {LIST}/{m}/{axis}")
+        self._show(m)
+        self._show_edit_item(m)
+
     def _show(self, m: int):
         self.send(f"number {LIST}/{m}/x {self.markers[m]['x'] - SIZE / 2}")
         self.send(f"number {LIST}/{m}/y {self.markers[m]['y'] - SIZE / 2}")
+
+    def _show_edit(self):
+        self.send(f"number lights/edit {1 if self.edit else 0}")
+        self.send(f"number lights/scroll {0 if self.edit else 1}")
+
+    def _show_edit_item(self, m: int):
+        self.send(f"number {LIST}/{m}/edit {1 if self.edit else 0}")
+        self.send(f"number {LIST}/{m}/marker/icon {1 if self.edit else 0}")
 
     def _load(self) -> list[dict]:
         try:
