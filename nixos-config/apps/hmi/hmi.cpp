@@ -13,6 +13,8 @@
 //   watch <path>                              e.g. a tap wrote activeIndex)
 //   background <#RRGGBB>                    error <message>
 //   image <path> <file.png|jpg>             (an image property: the picture it shows)
+//   list <path> add <ViewModel>|remove <i>|clear   (a list property's items;
+//                                           an item's properties: <path>/<i>/<name>)
 //
 // <path> is a property of the artboard's view model; a slash descends into a
 // nested view model (sidebar/activeIndex). color addresses a global view model
@@ -53,6 +55,8 @@
 #include "rive/viewmodel/viewmodel_instance.hpp"
 #include "rive/viewmodel/viewmodel_instance_boolean.hpp"
 #include "rive/viewmodel/viewmodel_instance_color.hpp"
+#include "rive/viewmodel/viewmodel_instance_list.hpp"
+#include "rive/viewmodel/viewmodel_instance_list_item.hpp"
 #include "rive/viewmodel/viewmodel_instance_number.hpp"
 #include "rive/viewmodel/viewmodel_instance_string.hpp"
 #include "rive/viewmodel/viewmodel_instance_viewmodel.hpp"
@@ -195,17 +199,32 @@ void readStdin()
   }
 }
 
-// "a/b/c": through nested view models a and b to the property c
+// "a/b/c": through nested view models a and b to the property c. A list
+// property is followed by an item's index: "markers/2/x".
 ViewModelInstanceValue* propertyAt(rcp<ViewModelInstance> vmi, const std::string& path)
 {
   std::string::size_type start = 0, slash;
   while (vmi && (slash = path.find('/', start)) != std::string::npos)
   {
     auto* nested = vmi->propertyValue(path.substr(start, slash - start));
-    vmi = nested && nested->is<ViewModelInstanceViewModel>()
-              ? nested->as<ViewModelInstanceViewModel>()->referenceViewModelInstance()
-              : nullptr;
     start = slash + 1;
+    if (nested && nested->is<ViewModelInstanceList>())
+    {
+      slash = path.find('/', start);
+      if (slash == std::string::npos)
+        return nullptr;
+      char* end = nullptr;
+      const long index = std::strtol(path.c_str() + start, &end, 10);
+      auto items = nested->as<ViewModelInstanceList>()->listItems();
+      vmi = end == path.c_str() + slash && index >= 0 && size_t(index) < items.size()
+                ? items[index]->viewModelInstance()
+                : nullptr;
+      start = slash + 1;
+    }
+    else
+      vmi = nested && nested->is<ViewModelInstanceViewModel>()
+                ? nested->as<ViewModelInstanceViewModel>()->referenceViewModelInstance()
+                : nullptr;
   }
   return vmi ? vmi->propertyValue(path.substr(start)) : nullptr;
 }
@@ -492,6 +511,37 @@ int main(int argc, char** argv)
       if (!image)
         return out("error cannot load image " + path);
       v->as<ViewModelInstanceAssetImage>()->value(image.get());   // takes its own reference
+    }
+    else if (cmd == "list")
+    {
+      // list <path> add <ViewModel> | remove <index> | clear
+      auto* v = propertyAt(vmi, name);
+      if (!v || !v->is<ViewModelInstanceList>())
+        return out("error no list property '" + name + "'");
+      auto* list = v->as<ViewModelInstanceList>();
+      std::string op, arg;
+      words >> op >> arg;
+      if (op == "add")
+      {
+        ViewModel* model = file->viewModel(arg);
+        rcp<ViewModelInstance> item = model ? file->createDefaultViewModelInstance(model) : nullptr;
+        if (!item)
+          return out("error no view model '" + arg + "'");
+        auto listItem = make_rcp<ViewModelInstanceListItem>();
+        listItem->viewModelInstance(item);   // set before adding: adding notifies right away
+        list->addItem(listItem);
+      }
+      else if (op == "remove")
+      {
+        const int index = std::atoi(arg.c_str());
+        if (index < 0 || size_t(index) >= list->listItems().size())
+          return out("error no item " + arg + " in '" + name + "'");
+        list->removeItem(index);
+      }
+      else if (op == "clear")
+        list->removeAllItems();
+      else
+        return out("error bad list command: " + line);
     }
     else if (cmd == "watch")
     {
