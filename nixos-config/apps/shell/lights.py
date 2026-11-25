@@ -16,8 +16,10 @@
   the side panel in edit mode        the selected light's settings:
                                        switch   on/off (as a tap on the light)
                                        list     Home Assistant's lights: a tap
-                                                assigns one to it / takes it off
-                                                (any number; the list scrolls)
+                                                assigns that one to it (one per
+                                                light: it replaces the one
+                                                before), tapped again: none;
+                                                the list scrolls
                                        Delete   removes the light
   the side panel                     slides in while any light is selected
                                      (empty for now); the pages don't scroll
@@ -245,13 +247,15 @@ class Lights:
             self._show_settings()
 
     def _toggle_entity(self, row: int):
-        """a Home Assistant light tapped in the list: assigned to the light, or taken off"""
+        """a Home Assistant light tapped in the list: the light's one HA light
+        (replacing the one before), or none when it was already that one.
+        `entities` stays a list, so several per light remain possible later."""
         m = self._panel_light()
         if m is None or row >= len(self.ha_lights):
             return
         entities = self.markers[m].setdefault("entities", [])
         e = self.ha_lights[row]["entity_id"]
-        entities.remove(e) if e in entities else entities.append(e)
+        entities[:] = [] if e in entities else [e]
         self._save()
         self._show_settings()
         self._show_edit_item(m)
