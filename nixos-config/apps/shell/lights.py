@@ -6,9 +6,11 @@
                                      icon and can be dragged; the pages don't
                                      scroll meanwhile
   a light, tapped                    on/off, when the finger lifts
-  a light, held (HOLD seconds)       selected: an orange ring; the release
-                                     after it does not switch the light
-  the plan, tapped beside the lights the selection is cleared
+  a light, held (HOLD seconds)       selected (orange ring): starts a selection;
+                                     the release after it does not switch it
+  a light, tapped, while any light   in or out of the selection (not on/off),
+  is selected                        so several lights can be selected
+  the plan, tapped beside the lights the selection is cleared (also: edit mode)
 
 A light shows what its Home Assistant light is doing: `level` (brightness
 0-1, 0 = off) and `color`; the file fades both over 1.5 s. Until a light is
@@ -70,7 +72,7 @@ class Lights:
         self.pressed: set[str] = set()           # buttons with a finger down on them
         self.edit = False
         self.save_timer: threading.Timer | None = None
-        self.selected: int | None = None
+        self.selected: set[int] = set()
         self.hold_timer: threading.Timer | None = None
         self.held = False                        # the current touch selected its light
         self.light_down = -1.0                   # when a light was last pressed
@@ -98,7 +100,7 @@ class Lights:
                 if self._tapped(path, value):
                     self.edit = not self.edit
                     if self.edit:
-                        self._select(None)               # editing moves lights, nothing is selected
+                        self._clear_selection()          # editing moves lights, nothing is selected
                     self._show_edit()
                     for m in range(len(self.markers)):
                         self._show_edit_item(m)
@@ -115,7 +117,8 @@ class Lights:
         return True
 
     def _light_press(self, m: int, value: float):
-        """tap: on/off when the finger lifts; hold: select (that release does nothing)"""
+        """tap: on/off when the finger lifts, or, while lights are selected, in or
+        out of the selection; hold: select it (that release does nothing)"""
         if m >= len(self.markers) or self.edit:
             return
         if self.hold_timer:
@@ -127,6 +130,8 @@ class Lights:
             self.hold_timer = threading.Timer(HOLD, self._hold, (m,))
             self.hold_timer.daemon = True
             self.hold_timer.start()
+        elif value == 0 and not self.held and self.selected:
+            self._set_selected(m, m not in self.selected)
         elif value == 0 and not self.held:
             mk = self.markers[m]                     # not connected yet: only its look
             mk["level"] = 0.0 if mk.get("level", 0) > 0 else 1.0
@@ -138,7 +143,7 @@ class Lights:
         with self.lock:
             self.hold_timer = None
             self.held = True
-            self._select(m)
+            self._set_selected(m, True)
 
     def _plan_press(self, value: float):
         """the plan tapped beside the lights: clear the selection. A press on a
@@ -147,16 +152,17 @@ class Lights:
         if value == 1:
             self.plan_down = now
         elif value == 0 and not self.edit and self.light_down < self.plan_down - SAME_TOUCH:
-            self._select(None)
+            self._clear_selection()
 
-    def _select(self, m: int | None):
-        if self.selected == m:
+    def _set_selected(self, m: int, on: bool):
+        if (m in self.selected) == on:
             return
-        if self.selected is not None and self.selected < len(self.markers):
-            self.send(f"number {LIST}/{self.selected}/marker/selected 0")
-        self.selected = m
-        if m is not None:
-            self.send(f"number {LIST}/{m}/marker/selected 1")
+        (self.selected.add if on else self.selected.discard)(m)
+        self.send(f"number {LIST}/{m}/marker/selected {1 if on else 0}")
+
+    def _clear_selection(self):
+        for m in sorted(self.selected):
+            self._set_selected(m, False)
 
     def _show_state(self, m: int):
         mk = self.markers[m]
@@ -238,7 +244,7 @@ class Lights:
         self._show(m)
         self._show_edit_item(m)
         self._show_state(m)
-        if m == self.selected:
+        if m in self.selected:
             self.send(f"number {LIST}/{m}/marker/selected 1")
 
     def _show(self, m: int):
