@@ -10,8 +10,13 @@
                                      after it does not switch the light
   the plan, tapped beside the lights the selection is cleared
 
-On/off is the light's look (and kept in the file below) until the lights are
-connected to Home Assistant.
+A light shows what its Home Assistant light is doing: `level` (brightness
+0-1, 0 = off) and `color`; the file fades both over 1.5 s. Until a light is
+connected to one (`entities`, a later step), it shows the not-connected icon
+and a tap switches only its look (level 1 / 0, kept in the file below).
+Connected, both directions: a tap/drag here goes to Home Assistant, and
+changes from elsewhere (the phone app, a switch) arrive through
+`show_ha_state`, which maps HA's state to level and colour.
 
 The lights are kept in ~/.config/homy/lights.json:
   {"markers": [{"x": 375, "y": 176}, …]}
@@ -27,8 +32,9 @@ x/y: the light's centre on the floorplan (750 × 353).
                     number lights/edit 1                     the gear highlighted
                     number lights/scroll 0                   the pages don't scroll
                     number lights/floorplan/markers/3/edit 1 the light can be dragged
-                    number lights/floorplan/markers/3/marker/icon 1   the move icon
-                    number lights/floorplan/markers/3/marker/lit 1    on (gold ring)
+                    number lights/floorplan/markers/3/marker/icon 1   0 bulb, 1 move, 2 not connected
+                    number lights/floorplan/markers/3/marker/level 0.5  brightness (0: off)
+                    color lights/floorplan/markers/3/marker/color #FFD9A0   the ring's colour
                     number lights/floorplan/markers/3/marker/selected 1   the orange ring
 
 The lights are a list in the file (FloorPlan's `markers`, one PlacedLight per
@@ -52,6 +58,8 @@ SPACING = 110           # new lights are placed at least this far apart
 SAVE_AFTER = 1.0        # s: a dragged light is saved once it rests this long
 HOLD = 0.5              # s: a light held this long is selected instead of switched
 SAME_TOUCH = 0.1        # s: a plan press this close to a light press is that light's touch
+DEFAULT_COLOR = "#EADFB6"   # the ring of a light with no colour (white light, not connected)
+ICON_BULB, ICON_MOVE, ICON_NOT_CONNECTED = 0, 1, 2
 
 
 class Lights:
@@ -120,8 +128,9 @@ class Lights:
             self.hold_timer.daemon = True
             self.hold_timer.start()
         elif value == 0 and not self.held:
-            self.markers[m]["on"] = not self.markers[m].get("on", False)
-            self._show_lit(m)
+            mk = self.markers[m]                     # not connected yet: only its look
+            mk["level"] = 0.0 if mk.get("level", 0) > 0 else 1.0
+            self._show_state(m)
             self._save()
         # 2: slid off, nothing
 
@@ -149,8 +158,31 @@ class Lights:
         if m is not None:
             self.send(f"number {LIST}/{m}/marker/selected 1")
 
-    def _show_lit(self, m: int):
-        self.send(f"number {LIST}/{m}/marker/lit {1 if self.markers[m].get('on') else 0}")
+    def _show_state(self, m: int):
+        mk = self.markers[m]
+        self.send(f"number {LIST}/{m}/marker/level {round(mk.get('level', 0.0), 3)}")
+        self.send(f"color {LIST}/{m}/marker/color {mk.get('color') or DEFAULT_COLOR}")
+
+    def show_ha_state(self, m: int, state: dict):
+        """a Home Assistant light state (from /api/states or a state_changed
+        event) → light m's level and colour"""
+        attrs = state.get("attributes", {})
+        if state.get("state") != "on":
+            level = 0.0
+        else:
+            level = (attrs.get("brightness") or 255) / 255
+        rgb = attrs.get("rgb_color")
+        color = "#{:02X}{:02X}{:02X}".format(*rgb) if rgb and len(rgb) == 3 else None
+        with self.lock:
+            mk = self.markers[m]
+            if mk.get("level") != level or mk.get("color") != color:
+                mk["level"], mk["color"] = level, color
+                self._show_state(m)
+
+    def _icon(self, m: int) -> int:
+        if self.edit:
+            return ICON_MOVE
+        return ICON_BULB if self.markers[m].get("entities") else ICON_NOT_CONNECTED
 
     def _tapped(self, path: str, value: float) -> bool:
         """a tap: the finger went down and came up on the button (2: slid off)"""
@@ -205,7 +237,7 @@ class Lights:
             self.send(f"watch {LIST}/{m}/{prop}")
         self._show(m)
         self._show_edit_item(m)
-        self._show_lit(m)
+        self._show_state(m)
         if m == self.selected:
             self.send(f"number {LIST}/{m}/marker/selected 1")
 
@@ -219,15 +251,22 @@ class Lights:
 
     def _show_edit_item(self, m: int):
         self.send(f"number {LIST}/{m}/edit {1 if self.edit else 0}")
-        self.send(f"number {LIST}/{m}/marker/icon {1 if self.edit else 0}")
+        self.send(f"number {LIST}/{m}/marker/icon {self._icon(m)}")
 
     def _load(self) -> list[dict]:
         try:
             markers = json.loads(STORE.read_text()).get("markers", [])
         except (OSError, json.JSONDecodeError, AttributeError):
             return []
-        return [{**m, "x": float(m.get("x", PLAN_W / 2)), "y": float(m.get("y", PLAN_H / 2))}
-                for m in markers if isinstance(m, dict)]
+        lights = []
+        for m in markers:
+            if not isinstance(m, dict):
+                continue
+            m = {**m, "x": float(m.get("x", PLAN_W / 2)), "y": float(m.get("y", PLAN_H / 2))}
+            if "on" in m:                         # saved before level existed
+                m.setdefault("level", 1.0 if m.pop("on") else 0.0)
+            lights.append(m)
+        return lights
 
     def _save(self):
         try:

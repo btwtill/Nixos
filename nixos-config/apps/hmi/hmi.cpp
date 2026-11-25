@@ -9,7 +9,7 @@
 // stdin                                   stdout
 //   number <path> <value>  (or 0/1: boolean) ready <artboard> <GPU>
 //   string <path> <text…>                   number <path> <value>   (a watched
-//   color <ViewModel>/<name> <#RRGGBB[AA]>    number changed inside the file,
+//   color <ViewModel>/<name>|<path> <#RRGGBB[AA]>  number changed inside the file,
 //   watch <path>                              e.g. a tap wrote activeIndex)
 //   background <#RRGGBB>                    error <message>
 //   image <path> <file.png|jpg>             (an image property: the picture it shows)
@@ -492,8 +492,9 @@ int main(int argc, char** argv)
       ColorInt argb;
       if (slash == std::string::npos || !parseColor(hex, &argb))
         return out("error bad color command: " + line);
+      // a global view model's colour (Theme/accent), else one on a path (lights/…/marker/color)
       auto it = globals.find(name.substr(0, slash));
-      auto* v = it == globals.end() ? nullptr : it->second->propertyValue(name.substr(slash + 1));
+      auto* v = it != globals.end() ? it->second->propertyValue(name.substr(slash + 1)) : propertyAt(vmi, name);
       if (v && v->is<ViewModelInstanceColor>())
         v->as<ViewModelInstanceColor>()->propertyValue(static_cast<int>(argb));
       // tokens the file doesn't have are skipped silently, like the web shell did
