@@ -11,6 +11,8 @@
   a light, tapped, while any light   in or out of the selection (not on/off),
   is selected                        so several lights can be selected
   the plan, tapped beside the lights the selection is cleared (also: edit mode)
+  the side panel                     slides in while any light is selected
+                                     (empty for now); the pages don't scroll
 
 A light shows what its Home Assistant light is doing: `level` (brightness
 0-1, 0 = off) and `color`; the file fades both over 1.5 s. Until a light is
@@ -28,11 +30,13 @@ x/y: the light's centre on the floorplan (750 × 353).
                     number lights/editPress 1|0|2            the gear
                     number lights/floorplan/markers/3/x 280  a light was dragged (edit mode)
                     number lights/floorplan/markers/3/press  a light: 1 down, 0 up, 2 slid off
-                    number lights/floorplan/planPress        the plan (also under a light)
+                    number lights/floorplan/planPress        the plan (also under a light or the panel)
+                    number lights/sidePanel/press            the side panel
   here → homy-hmi   list lights/floorplan/markers add PlacedLightInterface   one more light
                     number lights/floorplan/markers/3/x 245  its marker's top left
                     number lights/edit 1                     the gear highlighted
                     number lights/scroll 0                   the pages don't scroll
+                    number lights/panel 1                    the side panel in (0: out)
                     number lights/floorplan/markers/3/edit 1 the light can be dragged
                     number lights/floorplan/markers/3/marker/icon 1   0 bulb, 1 move, 2 not connected
                     number lights/floorplan/markers/3/marker/level 0.5  brightness (0: off)
@@ -75,7 +79,7 @@ class Lights:
         self.selected: set[int] = set()
         self.hold_timer: threading.Timer | None = None
         self.held = False                        # the current touch selected its light
-        self.light_down = -1.0                   # when a light was last pressed
+        self.light_down = -1.0                   # when a light or the panel was last pressed
         self.plan_down = -1.0                    # when the plan was last pressed
 
     def ready(self):
@@ -83,6 +87,7 @@ class Lights:
         self.send("watch lights/add")
         self.send("watch lights/editPress")
         self.send("watch lights/floorplan/planPress")
+        self.send("watch lights/sidePanel/press")
         with self.lock:
             self._show_edit()
             self.send(f"list {LIST} clear")
@@ -112,6 +117,9 @@ class Lights:
                 self._light_press(int(path.split("/")[3]), value)
             elif path == "lights/floorplan/planPress":
                 self._plan_press(value)
+            elif path == "lights/sidePanel/press":
+                if value == 1:                   # the plan underneath reports it too: not a plan tap
+                    self.light_down = time.monotonic()
             else:
                 return False
         return True
@@ -159,6 +167,7 @@ class Lights:
             return
         (self.selected.add if on else self.selected.discard)(m)
         self.send(f"number {LIST}/{m}/marker/selected {1 if on else 0}")
+        self._show_edit()                         # the panel: in with the first, out with the last
 
     def _clear_selection(self):
         for m in sorted(self.selected):
@@ -253,7 +262,8 @@ class Lights:
 
     def _show_edit(self):
         self.send(f"number lights/edit {1 if self.edit else 0}")
-        self.send(f"number lights/scroll {0 if self.edit else 1}")
+        self.send(f"number lights/scroll {0 if self.edit or self.selected else 1}")
+        self.send(f"number lights/panel {1 if self.selected else 0}")
 
     def _show_edit_item(self, m: int):
         self.send(f"number {LIST}/{m}/edit {1 if self.edit else 0}")
