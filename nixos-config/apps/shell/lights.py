@@ -13,6 +13,12 @@
   the plan, tapped beside the lights the selection is cleared (also: edit mode)
   a light, touched in edit mode      selected, alone (no multi-selection while
                                      editing); dragging it still moves it
+  the side panel in edit mode        the selected light's settings:
+                                       switch   on/off (as a tap on the light)
+                                       list     Home Assistant's lights: a tap
+                                                assigns one to it / takes it off
+                                                (any number; the list scrolls)
+                                       Delete   removes the light
   the side panel                     slides in while any light is selected
                                      (empty for now); the pages don't scroll
 
@@ -34,11 +40,19 @@ x/y: the light's centre on the floorplan (750 × 353).
                     number lights/floorplan/markers/3/press  a light: 1 down, 0 up, 2 slid off
                     number lights/floorplan/planPress        the plan (also under a light or the panel)
                     number lights/sidePanel/press            the side panel
+                    number lights/sidePanel/toggle/press     settings: the switch
+                    number lights/sidePanel/lights/2/press   settings: a Home Assistant light
+                    number lights/sidePanel/delete/press     settings: Delete
   here → homy-hmi   list lights/floorplan/markers add PlacedLightInterface   one more light
                     number lights/floorplan/markers/3/x 245  its marker's top left
                     number lights/edit 1                     the gear highlighted
                     number lights/scroll 0                   the pages don't scroll
                     number lights/panel 1                    the side panel in (0: out)
+                    number lights/sidePanel/page 1           its page: 1 settings (0: none yet)
+                    number lights/sidePanel/toggle/on 1      the switch
+                    list lights/sidePanel/lights add LightRowInterface   a row
+                    string lights/sidePanel/lights/2/label Ceiling Light 02
+                    number lights/sidePanel/lights/2/selected 1   assigned to the light
                     number lights/floorplan/markers/3/edit 1 the light can be dragged
                     number lights/floorplan/markers/3/marker/icon 1   0 bulb, 1 move, 2 not connected
                     number lights/floorplan/markers/3/marker/level 0.5  brightness (0: off)
@@ -56,6 +70,9 @@ import threading
 import time
 from pathlib import Path
 
+from light_client import HAClient
+
+SECRETS = Path.home() / ".config" / "home-app" / "secrets.json"
 STORE = Path.home() / ".config" / "homy" / "lights.json"
 
 LIST = "lights/floorplan/markers"
@@ -68,6 +85,10 @@ HOLD = 0.5              # s: a light held this long is selected instead of switc
 SAME_TOUCH = 0.1        # s: a plan press this close to a light press is that light's touch
 DEFAULT_COLOR = "#EADFB6"   # the ring of a light with no colour (white light, not connected)
 ICON_BULB, ICON_MOVE, ICON_NOT_CONNECTED = 0, 1, 2
+PANEL = "lights/sidePanel"
+ROWS = PANEL + "/lights"
+ROW = "LightRowInterface"       # the view model of one row (artboard LightRow)
+PAGE_NONE, PAGE_SETTINGS = 0, 1
 
 
 class Lights:
@@ -83,6 +104,15 @@ class Lights:
         self.held = False                        # the current touch selected its light
         self.light_down = -1.0                   # when a light or the panel was last pressed
         self.plan_down = -1.0                    # when the plan was last pressed
+        try:
+            secrets = json.loads(SECRETS.read_text())
+        except (OSError, json.JSONDecodeError):
+            secrets = {}
+        self.ha = HAClient(secrets.get("ha_url", "http://localhost:8123"), secrets.get("ha_token", ""))
+        self.ha_lights: list[dict] = []          # Home Assistant's lights: {"entity_id", "name"}
+        self.ha_error = ""                       # why the list is empty, if it is
+        self.rows_shown: tuple | None = None     # what the list rows show now
+        self.settings_for: int | None = None     # the light the settings page shows
 
     def ready(self):
         """homy-hmi (re)started: watch the buttons, show the lights."""
@@ -90,6 +120,9 @@ class Lights:
         self.send("watch lights/editPress")
         self.send("watch lights/floorplan/planPress")
         self.send("watch lights/sidePanel/press")
+        for name in ("toggle", "delete"):
+            self.send(f"watch {PANEL}/{name}/press")
+        self.rows_shown = None
         with self.lock:
             self._show_edit()
             self.send(f"list {LIST} clear")
@@ -122,6 +155,17 @@ class Lights:
             elif path == "lights/sidePanel/press":
                 if value == 1:                   # the plan underneath reports it too: not a plan tap
                     self.light_down = time.monotonic()
+            elif path == f"{PANEL}/toggle/press":
+                m = self._panel_light()
+                if self._tapped(path, value) and m is not None:
+                    self._toggle_level(m)
+            elif path == f"{PANEL}/delete/press":
+                m = self._panel_light()
+                if self._tapped(path, value) and m is not None:
+                    self._delete(m)
+            elif path.startswith(ROWS + "/") and path.endswith("/press"):
+                if self._tapped(path, value):
+                    self._toggle_entity(int(path.split("/")[3]))
             else:
                 return False
         return True
@@ -150,11 +194,76 @@ class Lights:
         elif value == 0 and not self.held and self.selected:
             self._set_selected(m, m not in self.selected)
         elif value == 0 and not self.held:
-            mk = self.markers[m]                     # not connected yet: only its look
-            mk["level"] = 0.0 if mk.get("level", 0) > 0 else 1.0
-            self._show_state(m)
-            self._save()
+            self._toggle_level(m)
         # 2: slid off, nothing
+
+    def _toggle_level(self, m: int):
+        """on/off. Not connected to Home Assistant yet: only the light's look."""
+        mk = self.markers[m]
+        mk["level"] = 0.0 if mk.get("level", 0) > 0 else 1.0
+        self._show_state(m)
+        self._save()
+
+    # ── the side panel's settings page ───────────────────────────────────────
+    def _panel_light(self) -> int | None:
+        """the light the settings page is about: the one selected in edit mode"""
+        if self.edit and len(self.selected) == 1:
+            return next(iter(self.selected))
+        return None
+
+    def _show_settings(self):
+        m = self._panel_light()
+        self.send(f"number {PANEL}/page {PAGE_SETTINGS if m is not None else PAGE_NONE}")
+        if m is None:
+            return
+        self.send(f"number {PANEL}/toggle/on {1 if self.markers[m].get('level', 0) > 0 else 0}")
+        mine = set(self.markers[m].get("entities", []))
+        rows = [(l["name"], l["entity_id"] in mine) for l in self.ha_lights] or [(self.ha_error or "Loading …", False)]
+        shown = tuple(name for name, _ in rows)
+        if self.rows_shown is None or tuple(n for n, _ in self.rows_shown) != shown:
+            self.send(f"list {ROWS} clear")
+            for r, (name, _) in enumerate(rows):
+                self.send(f"list {ROWS} add {ROW}")
+                self.send(f"string {ROWS}/{r}/label {name}")
+                self.send(f"watch {ROWS}/{r}/press")
+        for r, (_, on) in enumerate(rows):
+            self.send(f"number {ROWS}/{r}/selected {1 if on else 0}")
+        self.rows_shown = tuple(rows)
+
+    def _refresh_ha_lights(self):
+        """Home Assistant's lights, for the list (in the background)"""
+        states = self.ha.get_states()
+        with self.lock:
+            if states is None:
+                self.ha_lights, self.ha_error = [], "Home Assistant not reachable"
+            else:
+                lights = [s for s in states if s.get("entity_id", "").startswith("light.")]
+                self.ha_lights = sorted(({"entity_id": s["entity_id"],
+                                          "name": s.get("attributes", {}).get("friendly_name", s["entity_id"])}
+                                         for s in lights), key=lambda l: l["name"].lower())
+                self.ha_error = "" if lights else "No lights in Home Assistant"
+            self._show_settings()
+
+    def _toggle_entity(self, row: int):
+        """a Home Assistant light tapped in the list: assigned to the light, or taken off"""
+        m = self._panel_light()
+        if m is None or row >= len(self.ha_lights):
+            return
+        entities = self.markers[m].setdefault("entities", [])
+        e = self.ha_lights[row]["entity_id"]
+        entities.remove(e) if e in entities else entities.append(e)
+        self._save()
+        self._show_settings()
+        self._show_edit_item(m)
+
+    def _delete(self, m: int):
+        """the light goes: off the plan, out of the list and the file"""
+        self.send(f"list {LIST} remove {m}")
+        self.markers.pop(m)
+        self.selected = {i - (i > m) for i in self.selected if i != m}
+        self._save()
+        self._show_edit()
+        self.log(f"lights: light {m} deleted")
 
     def _hold(self, m: int):
         with self.lock:
@@ -186,6 +295,8 @@ class Lights:
         mk = self.markers[m]
         self.send(f"number {LIST}/{m}/marker/level {round(mk.get('level', 0.0), 3)}")
         self.send(f"color {LIST}/{m}/marker/color {mk.get('color') or DEFAULT_COLOR}")
+        if m == self._panel_light():              # the settings page's switch follows it
+            self.send(f"number {PANEL}/toggle/on {1 if mk.get('level', 0) > 0 else 0}")
 
     def show_ha_state(self, m: int, state: dict):
         """a Home Assistant light state (from /api/states or a state_changed
@@ -273,6 +384,10 @@ class Lights:
         self.send(f"number lights/edit {1 if self.edit else 0}")
         self.send(f"number lights/scroll {0 if self.edit or self.selected else 1}")
         self.send(f"number lights/panel {1 if self.selected else 0}")
+        was, self.settings_for = self.settings_for, self._panel_light()
+        if self.settings_for is not None and was is None:
+            threading.Thread(target=self._refresh_ha_lights, daemon=True).start()   # the page opens: fresh list
+        self._show_settings()
 
     def _show_edit_item(self, m: int):
         self.send(f"number {LIST}/{m}/edit {1 if self.edit else 0}")
