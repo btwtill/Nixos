@@ -11,6 +11,8 @@
   a light, tapped, while any light   in or out of the selection (not on/off),
   is selected                        so several lights can be selected
   the plan, tapped beside the lights the selection is cleared (also: edit mode)
+  a light, touched in edit mode      selected, alone (no multi-selection while
+                                     editing); dragging it still moves it
   the side panel                     slides in while any light is selected
                                      (empty for now); the pages don't scroll
 
@@ -127,7 +129,14 @@ class Lights:
     def _light_press(self, m: int, value: float):
         """tap: on/off when the finger lifts, or, while lights are selected, in or
         out of the selection; hold: select it (that release does nothing)"""
-        if m >= len(self.markers) or self.edit:
+        if m >= len(self.markers):
+            return
+        if self.edit:                            # editing: the touched light alone is selected
+            if value == 1:
+                self.light_down = time.monotonic()
+                for other in sorted(self.selected - {m}):
+                    self._set_selected(other, False)
+                self._set_selected(m, True)
             return
         if self.hold_timer:
             self.hold_timer.cancel()
@@ -159,7 +168,7 @@ class Lights:
         now = time.monotonic()
         if value == 1:
             self.plan_down = now
-        elif value == 0 and not self.edit and self.light_down < self.plan_down - SAME_TOUCH:
+        elif value == 0 and self.light_down < self.plan_down - SAME_TOUCH:
             self._clear_selection()
 
     def _set_selected(self, m: int, on: bool):
